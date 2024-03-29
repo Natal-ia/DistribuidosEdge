@@ -1,10 +1,13 @@
 package com.example;
 
+import org.zeromq.SocketType;
+import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.Random;
+import java.time.Instant;
 
 public class Sensor implements Runnable {
     private final String sensorId;
@@ -47,20 +50,26 @@ public class Sensor implements Runnable {
             }
             while (!Thread.currentThread().isInterrupted()) {
                 String message = "";
-
+                String timestamp;
                 switch (sensorId) {
+
                     case "Temperatura":
                         double sensorValueT = generateSensorDouble(11.0, 29.4);
-                        message = sensorId + "," + System.currentTimeMillis() + "," + sensorValueT;
+                        timestamp = Instant.now().toString();
+                        message = sensorId + "," + timestamp + "," + sensorValueT;
                         break;
                     case "Humo":
                         boolean sensorValueB = generateSensorBoolean();
-                        message = sensorId + "," + System.currentTimeMillis() + "," + sensorValueB;
-                    
+                        timestamp = Instant.now().toString();
+                        message = sensorId + "," + timestamp + "," + sensorValueB;
+                        if (sensorValueB) {
+                            sendAlertToAspersor(message);
+                        }
                         break;
                     case "Humedad":
                         double sensorValueH = generateSensorDouble(70.0, 100.0);
-                        message = sensorId + "," + System.currentTimeMillis() + "," + sensorValueH;
+                        timestamp = Instant.now().toString();
+                        message = sensorId + "," + timestamp + "," + sensorValueH;
                         break;
                     default:
                         message = "Error";
@@ -68,7 +77,6 @@ public class Sensor implements Runnable {
                 }
 
                 // Send the message to the proxy server
-                
                 socket.send(message.getBytes(), 0);
                 System.out.println("Sent: " + message + " from thread " + threadId);
                 // Sleep for the specified interval before sending the next message
@@ -89,7 +97,7 @@ public class Sensor implements Runnable {
             } else {
                 throw new IllegalArgumentException("Invalid config file: missing rangeProbability");
             }
-    
+
             // Read the second line for outOfRangeProbability
             line = reader.readLine();
             if (line != null) {
@@ -97,7 +105,7 @@ public class Sensor implements Runnable {
             } else {
                 throw new IllegalArgumentException("Invalid config file: missing outOfRangeProbability");
             }
-    
+
             // Read the third line for incorrectDataProbability
             line = reader.readLine();
             if (line != null) {
@@ -105,7 +113,7 @@ public class Sensor implements Runnable {
             } else {
                 throw new IllegalArgumentException("Invalid config file: missing incorrectDataProbability");
             }
-    
+
         } catch (IOException | NumberFormatException e) {
             e.printStackTrace();
         }
@@ -150,22 +158,30 @@ public class Sensor implements Runnable {
     private boolean generateSensorBoolean() {
         double randomNumber = random.nextDouble();
         boolean sensorValue;
-    
+
         if (randomNumber < rangeProbability) {
             // Generate a true value within the specified rangeProbability
             sensorValue = true;
-        
+
         } else if (randomNumber < rangeProbability + incorrectDataProbability) {
             // Generate a false value based on the incorrectDataProbability
             sensorValue = false;
-        
+
         } else {
             // Generate a random false value
-            //sensorValue = random.nextDouble() < 0.5; // 50% chance of false
             sensorValue = false;
         }
-        
+
         return sensorValue;
+    }
+
+    private void sendAlertToAspersor(String message) {
+        ZContext context = new ZContext();
+        ZMQ.Socket aspersorSocket = context.createSocket(SocketType.REQ);
+        aspersorSocket.connect("tcp://localhost:5555");
+        aspersorSocket.send(message.getBytes(), 0);
+        System.out.println("Alerta de humo enviada al aspersor");
+
     }
 
 }

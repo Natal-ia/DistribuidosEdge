@@ -24,18 +24,17 @@ public class SensorClient {
                 String config = "";
                 if(i == 0){
                     sensorType = "Humo";
-                    config = "src/main/resources/humoConfig.txt";
+                    config = "Distribuidos/proyecto/src/main/resources/humoConfig.txt";
                 } else if(i == 1){
                     sensorType = "Humedad";
-                    config = "src/main/resources/humedadConfig.txt";
+                    config = "Distribuidos/proyecto/src/main/resources/humedadConfig.txt";
                 } else if(i == 2){
                     sensorType = "Temperatura";
-                    config = "src/main/resources/temperaturaConfig.txt";
+                    config = "Distribuidos/proyecto/src/main/resources/temperaturaConfig.txt";
                 }
  
                 for (int j = 0; j < 10; j++) { 
                     Sensor sensor = new Sensor(sensorType, serverAddress, j, socket, config);
-                    System.out.println("Starting sensor " + sensorType);
                     Thread sensorThread = new Thread(sensor);
                     sensorThread.start();
                 }

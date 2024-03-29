@@ -20,10 +20,6 @@ public class ProxyServer {
                 byte[] message = socket.recv(0);
                 System.out.println("Received from sensor: " + new String(message, ZMQ.CHARSET));
 
-                // Process the received message (if needed)
-
-                // Optionally, send a response back to the sensor
-
             }
         } catch (Exception e) {
             e.printStackTrace();
