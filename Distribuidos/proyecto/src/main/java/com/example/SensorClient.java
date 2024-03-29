@@ -33,9 +33,9 @@ public class SensorClient {
                     config = "src/main/resources/temperaturaConfig.txt";
                 }
  
-                for (int j = 0; j < 10; j++) { // Ten threads for each sensorthread ID " + j);
-                    Sensor sensor = new Sensor(sensorType, serverAddress, j, sock
-                    System.out.println("Starting sensor " + sensorType + " with et, config);
+                for (int j = 0; j < 10; j++) { 
+                    Sensor sensor = new Sensor(sensorType, serverAddress, j, socket, config);
+                    System.out.println("Starting sensor " + sensorType);
                     Thread sensorThread = new Thread(sensor);
                     sensorThread.start();
                 }
