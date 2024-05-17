@@ -3,6 +3,7 @@ package com.example;
 import org.zeromq.SocketType;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
+import org.zeromq.ZMQ.Poller;
 
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -10,7 +11,7 @@ public class HealthCheck implements Runnable {
 
     private final AtomicReference<String> proxyAddress;
     private static final String proxy = "tcp://localhost:1234";
-    private static final String respaldo = "tcp://otrohost:1234";
+    private static final String respaldo = "tcp://localhost:4321";
 
     public HealthCheck(AtomicReference<String> proxyAddress) {
         this.proxyAddress = proxyAddress;
@@ -19,21 +20,22 @@ public class HealthCheck implements Runnable {
     @Override
     public void run() {
         int estado = 0; // 0 for proxy, 1 for backup
-        int segundosEspera = 10 * 1000; // in milliseconds
+        int segundosEspera = 10;
 
         try (ZContext context = new ZContext()) {
             ZMQ.Socket socket = context.createSocket(SocketType.REQ);
+            Poller poller = context.createPoller(1);
+            poller.register(socket, Poller.POLLIN);
 
             while (!Thread.currentThread().isInterrupted()) {
                 socket.connect(proxyAddress.get());
                 String requestMessage = "Health check";
                 socket.send(requestMessage.getBytes(), 0);
 
-                byte[] reply = socket.recv(segundosEspera);
-                if (reply != null) {
+                if (poller.poll(segundosEspera * 1000) > 0 && poller.pollin(0)) {
+                    byte[] reply = socket.recv(0);
                     String respuesta = new String(reply, ZMQ.CHARSET);
                     if (respuesta.equals("OK")) {
-                        // Proxy is healthy, continue
                         socket.disconnect(proxyAddress.get());
                     } else {
                         handleProxyFailure(socket, estado);
@@ -42,7 +44,7 @@ public class HealthCheck implements Runnable {
                     handleProxyFailure(socket, estado);
                 }
 
-                Thread.sleep(segundosEspera);
+                Thread.sleep(segundosEspera * 1000);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
