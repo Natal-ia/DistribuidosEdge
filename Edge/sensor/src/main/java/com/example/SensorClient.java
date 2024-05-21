@@ -4,14 +4,16 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class SensorClient {
     public static void main(String[] args) {
-        // Obtener Argumentos del programa
+      /*   // Obtener Argumentos del programa
         if (args.length < 2) {
             System.out.println("Uso: java SensorClient <nombre_sensor> <nombre_archivo>");
             System.exit(1);
         }
 
         String sensorName = args[0];
-        String configFile = args[1];
+        String configFile = args[1];*/
+        String sensorName = "Humedad";
+        String configFile = "humedadConfig.txt";
 
         System.out.println("Nombre sensor: " + sensorName);
         System.out.println("Archivo configuración: " + configFile);
@@ -22,7 +24,7 @@ public class SensorClient {
         Thread healthCheckThread = new Thread(new HealthCheck(proxyAddress));
         healthCheckThread.start();
 
-        String nombreArchivo = "Edge/sensor/src/main/resources/" + configFile;
+        String nombreArchivo = "C:/Users/Natalia Mejia/OneDrive - Gimnasio Femenino/Desktop/Entrega 2- Distribuidos/Edge/sensor/src/main/resources/" + configFile;
         Thread[] sensorThreads = new Thread[10];
 
         for (int j = 0; j < 10; j++) {

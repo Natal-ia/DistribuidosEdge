@@ -1,15 +1,15 @@
 package com.example;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import org.zeromq.SocketType;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class ProxyServer {
 
-    private static final double MAX_TEMPERATURE = 29.; // Temperatura máxima para generar alerta
+    private static final double MAX_TEMPERATURE = 29.0; // Temperatura máxima para generar alerta
     private static final int SENSOR_COUNT = 10;
     private static final int HUMIDITY_CALCULATION_INTERVAL_MS = 5000;
 
@@ -20,8 +20,8 @@ public class ProxyServer {
             ZMQ.Socket alertSender = context.createSocket(SocketType.PUSH);
 
             receiver.bind("tcp://*:1234");
-            cloudSender.connect("tcp://cloud.server:5678"); // Conectar al servidor en la nube
-            alertSender.connect("tcp://fog.alert:5555"); // Conectar al sistema de calidad en la capa Fog
+            cloudSender.connect("tcp://localhost:5678"); // Conectar al servidor en la nube
+            alertSender.connect("tcp://localhost:5555"); // Conectar al sistema de calidad en la capa Fog
 
             List<Double> temperatureReadings = new ArrayList<>();
             List<Double> humidityReadings = new ArrayList<>();
@@ -29,6 +29,10 @@ public class ProxyServer {
             long lastHumidityCalculationTime = System.currentTimeMillis();
 
             System.out.println("Proxy server started and listening on tcp://*:1234");
+
+            // Iniciar el hilo del HealthCheckResponder
+            Thread healthCheckThread = new Thread(new HealthCheckResponder(context, "tcp://*:1235"));
+            healthCheckThread.start();
 
             while (true) {
                 byte[] messageBytes = receiver.recv(0);
@@ -46,7 +50,7 @@ public class ProxyServer {
                 try {
                     double value = Double.parseDouble(valueStr);
                     if (sensorId.startsWith("temperatura")) {
-                        if (value>=0) {  //No erroneos
+                        if (value >= 11 && value <= 29.4) { // No erroneos
                             temperatureReadings.add(value);
                             if (temperatureReadings.size() == SENSOR_COUNT) {
                                 calculoTemperatura(temperatureReadings, timestamp, alertSender, cloudSender);
@@ -55,8 +59,7 @@ public class ProxyServer {
                         }
                     } else if (sensorId.startsWith("humedad")) {
                         humidityReadings.add(value);
-                        if (System.currentTimeMillis()
-                                - lastHumidityCalculationTime >= HUMIDITY_CALCULATION_INTERVAL_MS) {
+                        if (System.currentTimeMillis() - lastHumidityCalculationTime >= HUMIDITY_CALCULATION_INTERVAL_MS) {
                             humedadDiaria(humidityReadings, timestamp, cloudSender);
                             humidityReadings.clear();
                             lastHumidityCalculationTime = System.currentTimeMillis();

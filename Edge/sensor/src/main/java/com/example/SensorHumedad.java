@@ -11,6 +11,8 @@ import java.time.Instant;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class SensorHumedad implements Runnable {
+    String RESET = "\u001B[0m";
+    String RED = "\u001B[31m";
     private final String sensorId;
     private final AtomicReference<String> proxyAddress;
     private final Random random;
@@ -57,7 +59,7 @@ public class SensorHumedad implements Runnable {
                 if (!socket.getLastEndpoint().equals(currentAddress)) {
                     socket.disconnect(socket.getLastEndpoint());
                     socket.connect(currentAddress);
-                    System.out.println("Reconnected to proxy server at " + currentAddress);
+                    System.out.println(RED+"Reconnected to proxy server at " + currentAddress +RESET);
                 }
             }
         } catch (InterruptedException e) {

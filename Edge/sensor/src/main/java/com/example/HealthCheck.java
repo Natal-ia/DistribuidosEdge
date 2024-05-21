@@ -3,14 +3,15 @@ package com.example;
 import org.zeromq.SocketType;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
-import org.zeromq.ZMQ.Poller;
+
 
 import java.util.concurrent.atomic.AtomicReference;
 
 public class HealthCheck implements Runnable {
 
+    private int estado = 0; // 0 for proxy, 1 for backup
     private final AtomicReference<String> proxyAddress;
-    private static final String proxy = "tcp://10.43.100.230:1234";
+    private static final String proxy = "tcp://10.43.100.230:1235";
     private static final String respaldo = "tcp://10.43.100.191:4321";
 
     public HealthCheck(AtomicReference<String> proxyAddress) {
@@ -19,40 +20,36 @@ public class HealthCheck implements Runnable {
 
     @Override
     public void run() {
-        int estado = 0; // 0 for proxy, 1 for backup
-        int segundosEspera = 10;
-
         try (ZContext context = new ZContext()) {
-            ZMQ.Socket socket = context.createSocket(SocketType.REQ);
-            Poller poller = context.createPoller(1);
-            poller.register(socket, Poller.POLLIN);
+            try (ZMQ.Socket socket = context.createSocket(SocketType.REQ)) {
+                socket.connect("tcp://10.43.100.230:5555");
+                while (!Thread.currentThread().isInterrupted()) {
+                    Thread.sleep(1000);
+                    String request = "OK";
+                    socket.send(request.getBytes(ZMQ.CHARSET), 0);
 
-            while (!Thread.currentThread().isInterrupted()) {
-                socket.connect(proxyAddress.get());
-                String requestMessage = "Health check";
-                socket.send(requestMessage.getBytes(), 0);
+                    socket.setReceiveTimeOut(4000);
 
-                if (poller.poll(segundosEspera * 1000) > 0 && poller.pollin(0)) {
-                    byte[] reply = socket.recv(0);
-                    String respuesta = new String(reply, ZMQ.CHARSET);
-                    if (respuesta.equals("OK")) {
-                        socket.disconnect(proxyAddress.get());
+                    // Receive the reply with a timeout
+                    byte[] reply = socket.recv();
+
+                    if (reply != null) {
+                        // If there's a reply within the timeout
+                        System.out.println("Received response: " + new String(reply));
                     } else {
-                        handleProxyFailure(socket, estado);
+                        // If no reply received within the timeout
+                        handleProxyFailure(socket);
                     }
-                } else {
-                    handleProxyFailure(socket, estado);
-                }
 
-                Thread.sleep(segundosEspera * 1000);
+                }
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            e.printStackTrace();
+        } catch (Exception e) {
+            System.out.println("Health check thread interrupted.... changing proxy server.");
         }
     }
 
-    private void handleProxyFailure(ZMQ.Socket socket, int estado) {
+    private void handleProxyFailure(ZMQ.Socket socket) {
+        socket.disconnect(proxyAddress.get());
         if (estado == 0) {
             proxyAddress.set(respaldo);
             System.out.println("Proxy down. Switching to backup proxy.");
@@ -62,7 +59,7 @@ public class HealthCheck implements Runnable {
             System.out.println("Backup proxy down. Switching to primary proxy.");
             estado = 0;
         }
-        socket.disconnect(proxyAddress.get());
         socket.connect(proxyAddress.get());
     }
+
 }
