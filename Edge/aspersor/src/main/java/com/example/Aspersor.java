@@ -8,8 +8,8 @@ public class Aspersor {
         try (ZContext context = new ZContext()) {
             // Socket to talk to clients
             ZMQ.Socket socket = context.createSocket(ZMQ.REP);
-            socket.bind("tcp://*:5555");
-            System.out.println("Aspersor started and listening on tcp://*:5555");
+            socket.bind("tcp://localhost:4200");
+            System.out.println("Aspersor started and listening on tcp://localhost:4200");
 
             while (!Thread.currentThread().isInterrupted()) {
                 // Block until a message is received

@@ -16,7 +16,7 @@ import java.time.format.DateTimeFormatter;
 public class CloudServer {
 
     private static final int CALCULATION_INTERVAL = 20000; // 20 seconds
-    private static final double HUMIDITY_THRESHOLD = 30.0; // Example threshold for alerts
+    private static final double minimo_humedad = 70.0; 
 
     private static Map<String, List<Double>> dailyHumidityReadings = new HashMap<>();
     private static Map<String, List<Double>> monthlyHumidityReadings = new HashMap<>();
@@ -86,7 +86,7 @@ public class CloudServer {
             double monthlyAverage = sum / readings.size();
             System.out.println("Monthly average humidity for " + monthKey + ": " + monthlyAverage);
 
-            if (monthlyAverage < HUMIDITY_THRESHOLD) {
+            if (monthlyAverage < minimo_humedad) {
                 generateAlert(monthKey, monthlyAverage);
             }
         }
@@ -95,10 +95,19 @@ public class CloudServer {
     }
 
     private static void generateAlert(String monthKey, double monthlyAverage) {
-        String alertMessage = "ALERT: Low monthly humidity detected for " + monthKey + ": " + monthlyAverage;
+        String alertMessage = "ALERTA: Humedad fuera de rango en el " + monthKey + ": " + monthlyAverage;
         System.out.println(alertMessage);
         // Store the alert in the cloud
         storeAlert(new Measurement("alerta", Instant.now().toString(), monthlyAverage));
+        try (ZContext context = new ZContext()) {
+            ZMQ.Socket socket = context.createSocket(SocketType.REQ);
+            socket.connect("tcp://localhost:9876");
+
+            socket.send(alertMessage.getBytes(ZMQ.CHARSET), 0);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
     }
 
     private static void storeAlert(Measurement alert) {

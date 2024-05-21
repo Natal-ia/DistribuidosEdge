@@ -17,11 +17,9 @@ public class BackupProxyServer {
         try (ZContext context = new ZContext()) {
             ZMQ.Socket receiver = context.createSocket(SocketType.PULL);
             ZMQ.Socket cloudSender = context.createSocket(SocketType.PUSH);
-            ZMQ.Socket alertSender = context.createSocket(SocketType.PUSH);
 
             receiver.bind("tcp://*:4321");
             cloudSender.connect("tcp://localhost:5678"); // Conectar al servidor en la nube
-            alertSender.connect("tcp://localhost:5555"); // Conectar al sistema de calidad en la capa Fog
 
             List<Double> temperatureReadings = new ArrayList<>();
             List<Double> humidityReadings = new ArrayList<>();
@@ -49,9 +47,12 @@ public class BackupProxyServer {
                         if (value >= 11 && value <= 29.4) { // No erroneos
                             temperatureReadings.add(value);
                             if (temperatureReadings.size() == SENSOR_COUNT) {
-                                calculoTemperatura(temperatureReadings, timestamp, alertSender, cloudSender);
+                                calculoTemperatura(temperatureReadings, timestamp, cloudSender);
                                 temperatureReadings.clear();
                             }
+                        }else{
+                            System.out.println("Valor de temperatura erroneo: " + value);
+                            sendAlertToSC("ALERTA: Temperatura fuera de rango: ");
                         }
                     } else if (sensorId.startsWith("humedad")) {
                         humidityReadings.add(value);
@@ -70,7 +71,7 @@ public class BackupProxyServer {
         }
     }
 
-    private static void calculoTemperatura(List<Double> temperatureReadings, String timestamp, ZMQ.Socket alertSender, ZMQ.Socket cloudSender) {
+    private static void calculoTemperatura(List<Double> temperatureReadings, String timestamp, ZMQ.Socket cloudSender) {
         double sum = 0;
         for (double temp : temperatureReadings) {
             sum += temp;
@@ -80,7 +81,7 @@ public class BackupProxyServer {
 
         if (averageTemp > MAX_TEMPERATURE) {
             String alertMessage = "ALERT: High temperature detected: " + averageTemp + " at " + timestamp;
-            alertSender.send(alertMessage.getBytes(), 0);
+            sendAlertToSC("ALERTA: Temperatura fuera de rango: " + averageTemp + " at " + timestamp);
             cloudSender.send(alertMessage.getBytes(), 0);
             System.out.println("Sent alert: " + alertMessage);
         }
@@ -95,5 +96,14 @@ public class BackupProxyServer {
         String message = "Average humidity: " + averageHumidity + " at " + timestamp;
         cloudSender.send(message.getBytes(), 0);
         System.out.println("Sent to cloud: " + message);
+    }
+
+    private static void sendAlertToSC(String message) {
+        try (ZContext context = new ZContext()) {
+            ZMQ.Socket aspersorSocket = context.createSocket(SocketType.REQ);
+            aspersorSocket.connect("tcp://10.43.100.230:9876");
+            aspersorSocket.send(message.getBytes(), 0);
+            System.out.println("Alerta de humo enviada al sistema de calidad");
+        }
     }
 }

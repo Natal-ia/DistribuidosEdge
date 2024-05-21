@@ -45,6 +45,7 @@ public class SensorHumo implements Runnable {
                 message = sensorId + "," + timestamp + "," + sensorValueB;
                 if (sensorValueB) {
                     sendAlertToAspersor(message);
+                    sendAlertToSC(message);
                 }
 
                 // Send the message to the proxy server
@@ -111,9 +112,18 @@ public class SensorHumo implements Runnable {
     private void sendAlertToAspersor(String message) {
         try (ZContext context = new ZContext()) {
             ZMQ.Socket aspersorSocket = context.createSocket(SocketType.REQ);
-            aspersorSocket.connect("tcp://localhost:5555");
+            aspersorSocket.connect("tcp://localhost:4200");
             aspersorSocket.send(message.getBytes(), 0);
             System.out.println("Alerta de humo enviada al aspersor");
+        }
+    }
+
+    private void sendAlertToSC(String message) {
+        try (ZContext context = new ZContext()) {
+            ZMQ.Socket aspersorSocket = context.createSocket(SocketType.REQ);
+            aspersorSocket.connect("tcp://localhost:9876");
+            aspersorSocket.send(message.getBytes(), 0);
+            System.out.println("ALERTA: sensor de humo detecta humo");
         }
     }
 }

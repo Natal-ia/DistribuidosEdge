@@ -121,6 +121,7 @@ public class SensorHumedad implements Runnable {
 
     private double generateValueOutOfRange(double min, double max) {
         Boolean higherThanRange = random.nextBoolean();
+        sendAlertToSC("ALERTA: Sensor de humedad fuera de rango");
         if (higherThanRange) {
             return max + random.nextDouble() * 100; // Genera un valor mayor que el rango
         } else {
@@ -132,5 +133,14 @@ public class SensorHumedad implements Runnable {
     private double generateIncorrectData() {
         // Generate incorrect data as a negative random value
         return -random.nextDouble() * 100; // Genera un valor negativo entre 0 y -100
+    }
+
+    private void sendAlertToSC(String message) {
+        try (ZContext context = new ZContext()) {
+            ZMQ.Socket aspersorSocket = context.createSocket(SocketType.REQ);
+            aspersorSocket.connect("tcp://localhost:9876");
+            aspersorSocket.send(message.getBytes(), 0);
+            System.out.println("Alerta de humo enviada al sistema de calidad");
+        }
     }
 }
