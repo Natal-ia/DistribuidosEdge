@@ -10,8 +10,8 @@ import java.util.concurrent.atomic.AtomicReference;
 public class HealthCheck implements Runnable {
 
     private final AtomicReference<String> proxyAddress;
-    private static final String proxy = "tcp://localhost:1234";
-    private static final String respaldo = "tcp://localhost:4321";
+    private static final String proxy = "tcp://10.43.100.230:1234";
+    private static final String respaldo = "tcp://10.43.100.191:4321";
 
     public HealthCheck(AtomicReference<String> proxyAddress) {
         this.proxyAddress = proxyAddress;

@@ -16,7 +16,7 @@ public class SensorClient {
         System.out.println("Nombre sensor: " + sensorName);
         System.out.println("Archivo configuración: " + configFile);
 
-        AtomicReference<String> proxyAddress = new AtomicReference<>("tcp://localhost:1234");
+        AtomicReference<String> proxyAddress = new AtomicReference<>("tcp://10.43.100.230:1234");
 
         // Start the health check thread
         Thread healthCheckThread = new Thread(new HealthCheck(proxyAddress));
