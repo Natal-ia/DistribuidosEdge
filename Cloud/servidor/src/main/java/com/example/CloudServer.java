@@ -9,6 +9,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -110,10 +113,16 @@ public class CloudServer {
 
     }
 
+    
     private static void storeAlert(Measurement alert) {
-        // Implement the function to store alerts in the cloud
-        System.out.println("Storing alert: " + alert);
-        // Placeholder for actual storage implementation
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter("alertas.txt", true))) {
+            // Construir la línea de la alerta
+            writer.write(alert.toString());
+            writer.newLine(); // Agregar un salto de línea
+            System.out.println("Alerta guardada: " + alert.toString());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     static class Measurement {
