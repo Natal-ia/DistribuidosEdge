@@ -8,9 +8,9 @@ import org.zeromq.ZMQ;
 
 public class SistemaCalidadEdge {
     public static void main(String[] args) {
-        AtomicInteger alertCounter_T = new AtomicInteger(0); //Temperatura
-        AtomicInteger alertCounter_S = new AtomicInteger(0); //Humo
-        AtomicInteger alertCounter_H = new AtomicInteger(0); //Humedad
+        AtomicInteger alertCounter_T = new AtomicInteger(0); // Temperatura
+        AtomicInteger alertCounter_S = new AtomicInteger(0); // Humo
+        AtomicInteger alertCounter_H = new AtomicInteger(0); // Humedad
         try (ZContext context = new ZContext()) {
             ZMQ.Socket socket = context.createSocket(SocketType.REP);
             socket.bind("tcp://localhost:9876");
@@ -18,17 +18,18 @@ public class SistemaCalidadEdge {
                 // Espera una solicitud
                 byte[] solicitudBytes = socket.recv();
                 String alerta = new String(solicitudBytes, ZMQ.CHARSET);
-                System.out.println("Alerta de calidad en capa Cloud: " + alerta);
+                System.out.println("Alerta de calidad en capa Edge: " + alerta);
                 String[] partes = alerta.split(" ");
+
                 String t = partes[1].trim();
                 String s = partes[3].trim();
 
-                if(t.equals("Temperatura")){
+                if (t.equals("Temperatura")) {
                     alertCounter_T.incrementAndGet();
-                }else{
-                    if(s.equals("humo")){
+                } else {
+                    if (s.equals("humo")) {
                         alertCounter_S.incrementAndGet();
-                    }else{
+                    } else {
                         alertCounter_H.incrementAndGet();
                     }
                 }
