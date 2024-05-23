@@ -53,17 +53,17 @@ public class BackupProxyServer {
                         if (value >= 11 && value <= 29.4) { // No erroneos
                             temperatureReadings.add(value);
                             if (temperatureReadings.size() == SENSOR_COUNT) {
-                                calculoTemperatura(temperatureReadings, timestamp, cloudSender);
+                                calculoTemperatura(temperatureReadings, timestamp, cloudSender, messageCounter);
                                 temperatureReadings.clear();
                             }
                         }else{
                             System.out.println("Valor de temperatura erroneo: " + value);
-                            sendAlertToSC("ALERTA: Temperatura fuera de rango: ");
+                            sendAlertToSC("ALERTA: Temperatura fuera de rango: ", messageCounter);
                         }
                     } else if (sensorId.startsWith("humedad")) {
                         humidityReadings.add(value);
                         if (System.currentTimeMillis() - lastHumidityCalculationTime >= HUMIDITY_CALCULATION_INTERVAL_MS) {
-                            humedadDiaria(humidityReadings, timestamp, cloudSender);
+                            humedadDiaria(humidityReadings, timestamp, cloudSender, messageCounter);
                             humidityReadings.clear();
                             lastHumidityCalculationTime = System.currentTimeMillis();
                         }
@@ -87,14 +87,14 @@ public class BackupProxyServer {
 
         if (averageTemp > MAX_TEMPERATURE) {
             String alertMessage = "ALERT: High temperature detected: " + averageTemp + " at " + timestamp;
-            sendAlertToSC("ALERTA: Temperatura fuera de rango: " + averageTemp + " at " + timestamp);
+            sendAlertToSC("ALERTA: Temperatura fuera de rango: " + averageTemp + " at " + timestamp, messageCounter);
             cloudSender.send(alertMessage.getBytes(), 0);
             System.out.println("Sent alert: " + alertMessage);
             messageCounter.incrementAndGet();
         }
     }
 
-    private static void humedadDiaria(List<Double> humidityReadings, String timestamp, ZMQ.Socket cloudSender) {
+    private static void humedadDiaria(List<Double> humidityReadings, String timestamp, ZMQ.Socket cloudSender, AtomicInteger messageCounter) {
         double sum = 0;
         for (double humidity : humidityReadings) {
             sum += humidity;

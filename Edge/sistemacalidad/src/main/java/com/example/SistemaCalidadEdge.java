@@ -33,7 +33,7 @@ public class SistemaCalidadEdge {
                     }
                 }
             }
-            int total = alertCounter_H.get() + alertCounter_S.get() + alertCounter_T();
+            int total = alertCounter_H.get() + alertCounter_S.get() + alertCounter_T.get();
             System.out.println("Número total de alertas del sensor de temperatura: " + alertCounter_T.get());
             System.out.println("Número total de alertas del sensor de humo: " + alertCounter_S.get());
             System.out.println("Número total de alertas del sensor de humedad: " + alertCounter_H.get());
