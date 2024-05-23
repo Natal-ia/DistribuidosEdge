@@ -28,7 +28,19 @@ public class SensorClient {
 
         String nombreArchivo = "C:/Users/Natalia Mejia/OneDrive - Gimnasio Femenino/Desktop/Entrega 2- Distribuidos/Edge/sensor/src/main/resources/" + configFile;
         Thread[] sensorThreads = new Thread[10];
-
+for(int i=0; i<3; i++){
+    if(i==0){
+        sensorName = "Temperatura";
+        nombreArchivo = "C:/Users/Natalia Mejia/OneDrive - Gimnasio Femenino/Desktop/Entrega 2- Distribuidos/Edge/sensor/src/main/resources/temperaturaConfig.txt";
+    }
+    if(i==1){
+        sensorName = "Humedad";
+        nombreArchivo = "C:/Users/Natalia Mejia/OneDrive - Gimnasio Femenino/Desktop/Entrega 2- Distribuidos/Edge/sensor/src/main/resources/humedadConfig.txt";
+    }
+    if(i==2){
+        sensorName = "Humo";
+        nombreArchivo = "C:/Users/Natalia Mejia/OneDrive - Gimnasio Femenino/Desktop/Entrega 2- Distribuidos/Edge/sensor/src/main/resources/humoConfig.txt";
+    }
         for (int j = 0; j < 10; j++) {
             Runnable sensor;
             switch (sensorName.toLowerCase()) {
@@ -48,7 +60,7 @@ public class SensorClient {
             sensorThreads[j] = new Thread(sensor);
             sensorThreads[j].start();
         }
-
+    }
         // Add shutdown hook to gracefully shut down threads
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             for (Thread thread : sensorThreads) {
@@ -60,7 +72,6 @@ public class SensorClient {
             System.out.println("Mensajes enviados de la capa Edge: " + messageCounter.get());
         }));
 
-        // Let the main thread sleep to keep the program running
         try {
             Thread.sleep(Long.MAX_VALUE);
         } catch (InterruptedException e) {

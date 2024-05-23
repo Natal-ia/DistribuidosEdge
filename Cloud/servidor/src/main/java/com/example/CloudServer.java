@@ -7,7 +7,6 @@ import com.google.gson.Gson;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.io.BufferedWriter;
@@ -26,15 +25,10 @@ public class CloudServer {
     private static Map<String, List<Double>> monthlyHumidityReadings = new HashMap<>();
 
     public static void main(String[] args) {
-        AtomicInteger messageCounter = new AtomicInteger(0);
         try (ZContext context = new ZContext()) {
             ZMQ.Socket socket = context.createSocket(SocketType.REP);
             socket.bind("tcp://*:5678");
             System.out.println("Cloud server started and listening on tcp://*:5678");
-
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                System.out.println("Total de mensajes enviados de la capa Cloud: " + messageCounter.get());
-            }));
 
             long lastCalculationTime = System.currentTimeMillis();
 
@@ -47,12 +41,11 @@ public class CloudServer {
                 processMessage(messageStr);
 
                 socket.send("ACK".getBytes(ZMQ.CHARSET), 0);
-                messageCounter.incrementAndGet();
 
                 // Calculate monthly humidity average every 20 seconds
                 long currentTime = System.currentTimeMillis();
                 if (currentTime - lastCalculationTime >= CALCULATION_INTERVAL) {
-                    calculateMonthlyHumidityAverage(messageCounter);
+                    calculateMonthlyHumidityAverage();
                     lastCalculationTime = currentTime;
                 }
             }
@@ -61,21 +54,26 @@ public class CloudServer {
 
     private static void processMessage(String messageStr) {
         // Deserialize the message
-        Gson gson = new Gson();
-        Measurement measurement = gson.fromJson(messageStr, Measurement.class);
+        
+        String[] parts = messageStr.split(",");
+        if (parts.length == 3){
+            String sensorId = parts[0];
+            String valueStr = parts[1];
+            String timestamp = parts[2];
 
-        // Store the humidity readings for daily and monthly calculations
-        if (measurement.sensorId.contains("humedad")) {
-            dailyHumidityReadings.computeIfAbsent(measurement.sensorId, k -> new ArrayList<>()).add(measurement.value);
-
-            String monthKey = getMonthKey(measurement.timestamp);
-            monthlyHumidityReadings.computeIfAbsent(monthKey, k -> new ArrayList<>()).add(measurement.value);
-        }
+            if (sensorId.contains("humedad")) {
+                dailyHumidityReadings.computeIfAbsent(sensorId, k -> new ArrayList<>()).add(Double.parseDouble(valueStr));
+    
+                String monthKey = getMonthKey(timestamp);
+                monthlyHumidityReadings.computeIfAbsent(monthKey, k -> new ArrayList<>()).add(Double.parseDouble(valueStr));
+            }
 
         // Handle alerts
-        if (measurement.sensorId.contains("alerta")) {
-            storeAlert(measurement);
+        if (sensorId.contains("Alerta") || sensorId.contains("ALERTA")) {
+            storeAlert(messageStr);
         }
+        }
+
     }
 
     private static String getMonthKey(String timestamp) {
@@ -84,7 +82,7 @@ public class CloudServer {
         return dateTime.getMonth().toString() + "-" + dateTime.getYear();
     }
 
-    private static void calculateMonthlyHumidityAverage(AtomicInteger messageCounter) {
+    private static void calculateMonthlyHumidityAverage() {
         for (Map.Entry<String, List<Double>> entry : monthlyHumidityReadings.entrySet()) {
             String monthKey = entry.getKey();
             List<Double> readings = entry.getValue();
@@ -97,60 +95,38 @@ public class CloudServer {
             System.out.println("Monthly average humidity for " + monthKey + ": " + monthlyAverage);
 
             if (monthlyAverage < minimo_humedad) {
-                generateAlert(monthKey, monthlyAverage, messageCounter);
+                generateAlert(monthKey, monthlyAverage);
             }
         }
         // Clear the readings after calculation
         monthlyHumidityReadings.clear();
     }
 
-    private static void generateAlert(String monthKey, double monthlyAverage, AtomicInteger messageCounter) {
+    private static void generateAlert(String monthKey, double monthlyAverage) {
         String alertMessage = "ALERTA: Humedad fuera de rango en el " + monthKey + ": " + monthlyAverage;
         System.out.println(alertMessage);
         // Store the alert in the cloud
-        storeAlert(new Measurement("alerta", Instant.now().toString(), monthlyAverage));
+        storeAlert("Alerta "+ Instant.now().toString()+". Valor: "+ monthlyAverage);
         try (ZContext context = new ZContext()) {
             ZMQ.Socket socket = context.createSocket(SocketType.REQ);
             socket.connect("tcp://localhost:9876");
 
             socket.send(alertMessage.getBytes(ZMQ.CHARSET), 0);
-            messageCounter.incrementAndGet();
         } catch (Exception e) {
             e.printStackTrace();
         }
 
     }
 
-    
-    private static void storeAlert(Measurement alert) {
+    private static void storeAlert(String alert) {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter("alertas.txt", true))) {
-            // Construir la línea de la alerta
-            writer.write(alert.toString());
-            writer.newLine(); // Agregar un salto de línea
-            System.out.println("Alerta guardada: " + alert.toString());
+            writer.write(alert);
+            writer.newLine(); // Add a new line after each alert
+            System.out.println("Alerta guardada: " + alert);
         } catch (IOException e) {
+            System.err.println("Error writing alert to file: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
-    static class Measurement {
-        String sensorId;
-        String timestamp;
-        double value;
-
-        Measurement(String sensorId, String timestamp, double value) {
-            this.sensorId = sensorId;
-            this.timestamp = timestamp;
-            this.value = value;
-        }
-
-        @Override
-        public String toString() {
-            return "Measurement{" +
-                    "sensorId='" + sensorId + '\'' +
-                    ", timestamp='" + timestamp + '\'' +
-                    ", value=" + value +
-                    '}';
-        }
-    }
 }

@@ -18,7 +18,7 @@ public class BackupProxyServer {
         AtomicInteger messageCounter = new AtomicInteger(0);
         try (ZContext context = new ZContext()) {
             ZMQ.Socket receiver = context.createSocket(SocketType.PULL);
-            ZMQ.Socket cloudSender = context.createSocket(SocketType.PUSH);
+            ZMQ.Socket cloudSender = context.createSocket(SocketType.REQ);
 
             receiver.bind("tcp://*:4321");
             cloudSender.connect("tcp://localhost:5678"); // Conectar al servidor en la nube
@@ -87,9 +87,11 @@ public class BackupProxyServer {
 
         if (averageTemp > MAX_TEMPERATURE) {
             String alertMessage = "ALERT: High temperature detected: " + averageTemp + " at " + timestamp;
-            sendAlertToSC("ALERTA: Temperatura fuera de rango: " + averageTemp + " at " + timestamp, messageCounter);
+            sendAlertToSC("ALERTA: Temperatura fuera de rango " + averageTemp + " at " + timestamp, messageCounter);
             cloudSender.send(alertMessage.getBytes(), 0);
             System.out.println("Sent alert: " + alertMessage);
+            byte[] reply = cloudSender.recv();
+            System.out.println("Cloud " +reply);
             messageCounter.incrementAndGet();
         }
     }
@@ -103,6 +105,8 @@ public class BackupProxyServer {
         String message = "Average humidity: " + averageHumidity + " at " + timestamp;
         cloudSender.send(message.getBytes(), 0);
         System.out.println("Sent to cloud: " + message);
+        byte[] reply = cloudSender.recv();
+        System.out.println("Cloud " +reply);
         messageCounter.incrementAndGet();
     }
 
