@@ -94,7 +94,7 @@ public class ProxyServer {
                         if (valueStr.equals(true)) {
                             System.out.println("Alerta Humo ");
                             sendAlertToSC("ALERTA: Humo", messageCounter);
-                            String messageCloud = "ALERTA, Humo," +timestamp;
+                            String messageCloud = "ALERTA, Humo detectado," +timestamp;
                             cloudSender.send(messageCloud.getBytes(), 0);
                             System.out.println("Sent to cloud: " + message);
                             byte[] reply = cloudSender.recv();
@@ -121,7 +121,7 @@ public class ProxyServer {
         System.out.println("Promedio temperatura: " + averageTemp + " at " + timestamp);
 
         if (averageTemp > MAX_TEMPERATURE) {
-            String alertMessage = "Temperatura," + averageTemp + "," + timestamp;
+            String alertMessage = "Alerta temperartura," + averageTemp + "," + timestamp;
             sendAlertToSC("ALERTA: Temperatura fuera de rango " + averageTemp + " at " + timestamp, messageCounter);
             cloudSender.send(alertMessage.getBytes(), 0);
             System.out.println("Sent alert: " + alertMessage);

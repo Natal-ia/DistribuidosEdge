@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.time.Instant;
@@ -19,7 +20,7 @@ import java.time.format.DateTimeFormatter;
 public class CloudServer {
 
     private static final int CALCULATION_INTERVAL = 20000; // 20 seconds
-    private static final double minimo_humedad = 70.0; 
+    private static final double minimo_humedad = 70.0;
 
     private static Map<String, List<Double>> dailyHumidityReadings = new HashMap<>();
     private static Map<String, List<Double>> monthlyHumidityReadings = new HashMap<>();
@@ -54,37 +55,35 @@ public class CloudServer {
 
     private static void processMessage(String messageStr) {
         // Deserialize the message
-        
+
         String[] parts = messageStr.split(",");
-        if (parts.length == 3){
+        if (parts.length == 3) {
             String sensorId = parts[0];
             String valueStr = parts[1];
             String timestamp = parts[2];
 
-            if (sensorId.contains("humedad")) {
-                dailyHumidityReadings.computeIfAbsent(sensorId, k -> new ArrayList<>()).add(Double.parseDouble(valueStr));
-    
-                String monthKey = getMonthKey(timestamp);
-                monthlyHumidityReadings.computeIfAbsent(monthKey, k -> new ArrayList<>()).add(Double.parseDouble(valueStr));
+            System.out.println(sensorId + " " + valueStr + " " + timestamp);
+
+            if (sensorId.contains("Humedad")) {
+                dailyHumidityReadings.computeIfAbsent(sensorId, k -> new ArrayList<>())
+                        .add(Double.parseDouble(valueStr));
+
+                monthlyHumidityReadings.computeIfAbsent(timestamp, k -> new ArrayList<>())
+                        .add(Double.parseDouble(valueStr));
             }
 
-        // Handle alerts
-        if (sensorId.contains("Alerta") || sensorId.contains("ALERTA")) {
-            storeAlert(messageStr);
-        }
+            // Handle alerts
+
+            if (sensorId.contains("Alerta") || sensorId.contains("ALERTA")) {
+                storeAlert(messageStr);
+            }
         }
 
-    }
-
-    private static String getMonthKey(String timestamp) {
-        DateTimeFormatter formatter = DateTimeFormatter.ISO_INSTANT;
-        LocalDateTime dateTime = LocalDateTime.parse(timestamp, formatter);
-        return dateTime.getMonth().toString() + "-" + dateTime.getYear();
     }
 
     private static void calculateMonthlyHumidityAverage() {
         for (Map.Entry<String, List<Double>> entry : monthlyHumidityReadings.entrySet()) {
-            String monthKey = entry.getKey();
+            String timestamp = entry.getKey();
             List<Double> readings = entry.getValue();
 
             double sum = 0;
@@ -92,21 +91,21 @@ public class CloudServer {
                 sum += reading;
             }
             double monthlyAverage = sum / readings.size();
-            System.out.println("Monthly average humidity for " + monthKey + ": " + monthlyAverage);
+            System.out.println("Monthly average humidity for " + timestamp + ": " + monthlyAverage);
 
             if (monthlyAverage < minimo_humedad) {
-                generateAlert(monthKey, monthlyAverage);
+                generateAlert(timestamp, monthlyAverage);
             }
         }
         // Clear the readings after calculation
         monthlyHumidityReadings.clear();
     }
 
-    private static void generateAlert(String monthKey, double monthlyAverage) {
-        String alertMessage = "ALERTA: Humedad fuera de rango en el " + monthKey + ": " + monthlyAverage;
+    private static void generateAlert(String timeStamp, double monthlyAverage) {
+        String alertMessage = "ALERTA: Humedad fuera de rango en el " + timeStamp + ": " + monthlyAverage;
         System.out.println(alertMessage);
         // Store the alert in the cloud
-        storeAlert("Alerta "+ Instant.now().toString()+". Valor: "+ monthlyAverage);
+        storeAlert("Alerta " + Instant.now().toString() + ". Valor: " + monthlyAverage);
         try (ZContext context = new ZContext()) {
             ZMQ.Socket socket = context.createSocket(SocketType.REQ);
             socket.connect("tcp://localhost:9876");
@@ -119,10 +118,17 @@ public class CloudServer {
     }
 
     private static void storeAlert(String alert) {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter("alertas.txt", true))) {
-            writer.write(alert);
-            writer.newLine(); // Add a new line after each alert
-            System.out.println("Alerta guardada: " + alert);
+        File myObj = new File("alertas.txt");
+        try {
+            if (myObj.createNewFile()) {
+                System.out.println("Archivo de alertas creado: " + myObj.getName());
+            }
+            // Use FileWriter in append mode
+            try (FileWriter myWriter = new FileWriter(myObj, true)) {
+                myWriter.write(alert);
+                myWriter.write(System.lineSeparator()); // Add a new line after each alert
+                System.out.println("Alerta guardada: " + alert);
+            }
         } catch (IOException e) {
             System.err.println("Error writing alert to file: " + e.getMessage());
             e.printStackTrace();
