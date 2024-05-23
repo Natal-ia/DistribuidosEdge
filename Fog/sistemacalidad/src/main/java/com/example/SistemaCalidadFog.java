@@ -13,7 +13,7 @@ public class SistemaCalidadFog {
                 // Espera una solicitud
                 byte[] solicitudBytes = socket.recv();
                 String alerta = new String(solicitudBytes, ZMQ.CHARSET);
-                System.out.println("Alerta de calidad en capa Cloud: " + alerta);
+                System.out.println("Alerta de calidad en capa Fog: " + alerta);
             }
         } catch (Exception e) {
             e.printStackTrace();

@@ -6,6 +6,7 @@ import org.zeromq.ZMQ;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class BackupProxyServer {
 
@@ -14,6 +15,7 @@ public class BackupProxyServer {
     private static final int HUMIDITY_CALCULATION_INTERVAL_MS = 5000;
 
     public static void main(String[] args) {
+        AtomicInteger messageCounter = new AtomicInteger(0);
         try (ZContext context = new ZContext()) {
             ZMQ.Socket receiver = context.createSocket(SocketType.PULL);
             ZMQ.Socket cloudSender = context.createSocket(SocketType.PUSH);
@@ -27,6 +29,10 @@ public class BackupProxyServer {
             long lastHumidityCalculationTime = System.currentTimeMillis();
 
             System.out.println("Backup Proxy server started and listening on tcp://*:1234");
+
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                System.out.println("Mensajes enviados por el Backup Server: " + messageCounter.get());
+            }));
 
             while (true) {
                 byte[] messageBytes = receiver.recv(0);
@@ -71,7 +77,7 @@ public class BackupProxyServer {
         }
     }
 
-    private static void calculoTemperatura(List<Double> temperatureReadings, String timestamp, ZMQ.Socket cloudSender) {
+    private static void calculoTemperatura(List<Double> temperatureReadings, String timestamp, ZMQ.Socket cloudSender, AtomicInteger messageCounter) {
         double sum = 0;
         for (double temp : temperatureReadings) {
             sum += temp;
@@ -84,6 +90,7 @@ public class BackupProxyServer {
             sendAlertToSC("ALERTA: Temperatura fuera de rango: " + averageTemp + " at " + timestamp);
             cloudSender.send(alertMessage.getBytes(), 0);
             System.out.println("Sent alert: " + alertMessage);
+            messageCounter.incrementAndGet();
         }
     }
 
@@ -96,14 +103,16 @@ public class BackupProxyServer {
         String message = "Average humidity: " + averageHumidity + " at " + timestamp;
         cloudSender.send(message.getBytes(), 0);
         System.out.println("Sent to cloud: " + message);
+        messageCounter.incrementAndGet();
     }
 
-    private static void sendAlertToSC(String message) {
+    private static void sendAlertToSC(String message, AtomicInteger messageCounter) {
         try (ZContext context = new ZContext()) {
             ZMQ.Socket aspersorSocket = context.createSocket(SocketType.REQ);
             aspersorSocket.connect("tcp://10.43.100.230:9876");
             aspersorSocket.send(message.getBytes(), 0);
             System.out.println("Alerta de humo enviada al sistema de calidad");
+            messageCounter.incrementAndGet();
         }
     }
 }

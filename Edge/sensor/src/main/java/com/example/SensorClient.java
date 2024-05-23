@@ -1,5 +1,6 @@
 package com.example;
 
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class SensorClient {
@@ -19,9 +20,10 @@ public class SensorClient {
         System.out.println("Archivo configuración: " + configFile);
 
         AtomicReference<String> proxyAddress = new AtomicReference<>("tcp://10.43.100.230:1234");
+        AtomicInteger messageCounter = new AtomicInteger(0);
 
         // Start the health check thread
-        Thread healthCheckThread = new Thread(new HealthCheck(proxyAddress));
+        Thread healthCheckThread = new Thread(new HealthCheck(proxyAddress, messageCounter));
         healthCheckThread.start();
 
         String nombreArchivo = "C:/Users/Natalia Mejia/OneDrive - Gimnasio Femenino/Desktop/Entrega 2- Distribuidos/Edge/sensor/src/main/resources/" + configFile;
@@ -31,13 +33,13 @@ public class SensorClient {
             Runnable sensor;
             switch (sensorName.toLowerCase()) {
                 case "humo":
-                    sensor = new SensorHumo(sensorName.toLowerCase(), proxyAddress, j, nombreArchivo);
+                    sensor = new SensorHumo(sensorName.toLowerCase(), proxyAddress, j, nombreArchivo, messageCounter);
                     break;
                 case "humedad":
-                    sensor = new SensorHumedad(sensorName.toLowerCase(), proxyAddress, j, nombreArchivo);
+                    sensor = new SensorHumedad(sensorName.toLowerCase(), proxyAddress, j, nombreArchivo, messageCounter);
                     break;
                 case "temperatura":
-                    sensor = new SensorTemperatura(sensorName.toLowerCase(), proxyAddress, j, nombreArchivo);
+                    sensor = new SensorTemperatura(sensorName.toLowerCase(), proxyAddress, j, nombreArchivo, messageCounter);
                     break;
                 default:
                     System.out.println("Sensor desconocido: " + sensorName);
@@ -55,6 +57,7 @@ public class SensorClient {
                 }
             }
             healthCheckThread.interrupt();
+            System.out.println("Mensajes enviados de la capa Edge: " + messageCounter.get());
         }));
 
         // Let the main thread sleep to keep the program running

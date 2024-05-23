@@ -4,7 +4,7 @@ import org.zeromq.SocketType;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
 
-
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class HealthCheck implements Runnable {
@@ -14,8 +14,11 @@ public class HealthCheck implements Runnable {
     private static final String proxy = "tcp://10.43.100.230:1235";
     private static final String respaldo = "tcp://10.43.100.191:4321";
 
-    public HealthCheck(AtomicReference<String> proxyAddress) {
+    private AtomicInteger messageCounter;
+
+    public HealthCheck(AtomicReference<String> proxyAddress, AtomicInteger messageCounter) {
         this.proxyAddress = proxyAddress;
+        this.messageCounter = messageCounter;
     }
 
     @Override
@@ -27,6 +30,7 @@ public class HealthCheck implements Runnable {
                     Thread.sleep(1000);
                     String request = "OK";
                     socket.send(request.getBytes(ZMQ.CHARSET), 0);
+                    messageCounter.incrementAndGet();
 
                     socket.setReceiveTimeOut(4000);
 
@@ -43,8 +47,12 @@ public class HealthCheck implements Runnable {
 
                 }
             }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // Restore interrupt status
         } catch (Exception e) {
             System.out.println("Health check thread interrupted.... changing proxy server.");
+        }finally {
+            System.out.println("Mensajes enviados por el Health Check: " + messageCounter.get());
         }
     }
 
@@ -61,5 +69,4 @@ public class HealthCheck implements Runnable {
         }
         socket.connect(proxyAddress.get());
     }
-
 }

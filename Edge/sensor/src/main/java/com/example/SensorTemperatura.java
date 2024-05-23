@@ -8,6 +8,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.Random;
 import java.time.Instant;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class SensorTemperatura implements Runnable {
@@ -20,13 +21,16 @@ public class SensorTemperatura implements Runnable {
     private double outOfRangeProbability;
     private double incorrectDataProbability;
 
-    public SensorTemperatura(String sensorId, AtomicReference<String> proxyAddress, int threadId, String configFilePath) {
+    private AtomicInteger messageCounter;
+
+    public SensorTemperatura(String sensorId, AtomicReference<String> proxyAddress, int threadId, String configFilePath, AtomicInteger messageCounter) {
         this.sensorId = sensorId;
         this.proxyAddress = proxyAddress;
         this.random = new Random();
         this.threadId = threadId;
         this.configFilePath = configFilePath;
         this.loadConfig();
+        this.messageCounter = messageCounter;
     }
 
     @Override
@@ -48,6 +52,7 @@ public class SensorTemperatura implements Runnable {
                 // Send the message to the proxy server
                 socket.send(message.getBytes(), 0);
                 System.out.println("Sent: " + message + " from thread " + threadId);
+                messageCounter.incrementAndGet();
 
                 // Sleep for the specified interval before sending the next message
                 Thread.sleep(sleepInterval);
@@ -61,6 +66,8 @@ public class SensorTemperatura implements Runnable {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt(); // Restore the interrupted status
+        } finally {
+            System.out.println("Mensajes enviados por sensor de temperatura: " + messageCounter.get());
         }
     }
 
@@ -138,6 +145,7 @@ public class SensorTemperatura implements Runnable {
             aspersorSocket.connect("tcp://localhost:9876");
             aspersorSocket.send(message.getBytes(), 0);
             System.out.println("Alerta de humo enviada al sistema de calidad");
+            messageCounter.incrementAndGet();
         }
     }
 }

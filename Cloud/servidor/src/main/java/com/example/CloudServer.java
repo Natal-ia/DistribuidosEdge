@@ -7,6 +7,7 @@ import com.google.gson.Gson;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.io.BufferedWriter;
@@ -25,10 +26,15 @@ public class CloudServer {
     private static Map<String, List<Double>> monthlyHumidityReadings = new HashMap<>();
 
     public static void main(String[] args) {
+        AtomicInteger messageCounter = new AtomicInteger(0);
         try (ZContext context = new ZContext()) {
             ZMQ.Socket socket = context.createSocket(SocketType.REP);
             socket.bind("tcp://*:5678");
             System.out.println("Cloud server started and listening on tcp://*:5678");
+
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                System.out.println("Total de mensajes enviados de la capa Cloud: " + messageCounter.get());
+            }));
 
             long lastCalculationTime = System.currentTimeMillis();
 
@@ -41,11 +47,12 @@ public class CloudServer {
                 processMessage(messageStr);
 
                 socket.send("ACK".getBytes(ZMQ.CHARSET), 0);
+                messageCounter.incrementAndGet();
 
                 // Calculate monthly humidity average every 20 seconds
                 long currentTime = System.currentTimeMillis();
                 if (currentTime - lastCalculationTime >= CALCULATION_INTERVAL) {
-                    calculateMonthlyHumidityAverage();
+                    calculateMonthlyHumidityAverage(messageCounter);
                     lastCalculationTime = currentTime;
                 }
             }
@@ -77,7 +84,7 @@ public class CloudServer {
         return dateTime.getMonth().toString() + "-" + dateTime.getYear();
     }
 
-    private static void calculateMonthlyHumidityAverage() {
+    private static void calculateMonthlyHumidityAverage(AtomicInteger messageCounter) {
         for (Map.Entry<String, List<Double>> entry : monthlyHumidityReadings.entrySet()) {
             String monthKey = entry.getKey();
             List<Double> readings = entry.getValue();
@@ -90,14 +97,14 @@ public class CloudServer {
             System.out.println("Monthly average humidity for " + monthKey + ": " + monthlyAverage);
 
             if (monthlyAverage < minimo_humedad) {
-                generateAlert(monthKey, monthlyAverage);
+                generateAlert(monthKey, monthlyAverage, messageCounter);
             }
         }
         // Clear the readings after calculation
         monthlyHumidityReadings.clear();
     }
 
-    private static void generateAlert(String monthKey, double monthlyAverage) {
+    private static void generateAlert(String monthKey, double monthlyAverage, AtomicInteger messageCounter) {
         String alertMessage = "ALERTA: Humedad fuera de rango en el " + monthKey + ": " + monthlyAverage;
         System.out.println(alertMessage);
         // Store the alert in the cloud
@@ -107,6 +114,7 @@ public class CloudServer {
             socket.connect("tcp://localhost:9876");
 
             socket.send(alertMessage.getBytes(ZMQ.CHARSET), 0);
+            messageCounter.incrementAndGet();
         } catch (Exception e) {
             e.printStackTrace();
         }
