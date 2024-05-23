@@ -7,12 +7,18 @@ import org.zeromq.ZMQ;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.DoubleAdder;
 
 public class ProxyServer {
 
     private static final double MAX_TEMPERATURE = 29.0; // Temperatura máxima para generar alerta
     private static final int SENSOR_COUNT = 10;
     private static final int HUMIDITY_CALCULATION_INTERVAL_MS = 5000;
+
+    // Acumuladores para los tiempos de respuesta
+    private static DoubleAdder totalTimeAdder = new DoubleAdder();
+    private static DoubleAdder squaredTimeAdder = new DoubleAdder();
+    private static AtomicInteger responseCount = new AtomicInteger(0);
 
     public static void main(String[] args) {
         try (ZContext context = new ZContext()) {
@@ -46,6 +52,17 @@ public class ProxyServer {
                 int totalMessagesSent = messageCounter.get() + messageCounter_H.get();
                 System.out.println("Mensajes enviados por el proxy: " + messageCounter.get());
                 System.out.println("Mensajes enviados por el proxy y su HealthCheck: " + totalMessagesSent);
+
+                // Calcular y mostrar tiempo promedio y desviación estándar
+                double totalTime = totalTimeAdder.sum();
+                int count = responseCount.get();
+                double meanTime = totalTime / count;
+                double squaredTimeSum = squaredTimeAdder.sum();
+                double variance = (squaredTimeSum / count) - (meanTime * meanTime);
+                double stdDeviation = Math.sqrt(variance);
+
+                System.out.println("Tiempo promedio de request-reply: " + meanTime + " ms");
+                System.out.println("Desviación estándar del tiempo de request-reply: " + stdDeviation + " ms");
             }));
 
             while (!Thread.currentThread().isInterrupted()) {
@@ -75,11 +92,16 @@ public class ProxyServer {
                             System.out.println("Valor de temperatura erroneo: " + value);
                             sendAlertToSC("ALERTA: Temperatura fuera de rango", messageCounter);
                             messageCounter.incrementAndGet();
-                            String messageCloud = "ALERTA, Temperatura fuera de rango," +timestamp;
+                            String messageCloud = "ALERTA, Temperatura fuera de rango," + timestamp;
+
+                            long startTime = System.currentTimeMillis();
                             cloudSender.send(messageCloud.getBytes(), 0);
                             System.out.println("Sent to cloud: " + message);
                             byte[] reply = cloudSender.recv();
-                            System.out.println("Cloud " + reply);
+                            long endTime = System.currentTimeMillis();
+
+                            System.out.println("Cloud " + new String(reply, ZMQ.CHARSET));
+                            recordResponseTime(startTime, endTime);
                         }
                     } else if (sensorId.startsWith("humedad")) {
                         double value = Double.parseDouble(valueStr);
@@ -94,11 +116,16 @@ public class ProxyServer {
                         if (valueStr.equals(true)) {
                             System.out.println("Alerta Humo ");
                             sendAlertToSC("ALERTA: Humo", messageCounter);
-                            String messageCloud = "ALERTA, Humo detectado," +timestamp;
+                            String messageCloud = "ALERTA, Humo detectado," + timestamp;
+
+                            long startTime = System.currentTimeMillis();
                             cloudSender.send(messageCloud.getBytes(), 0);
                             System.out.println("Sent to cloud: " + message);
                             byte[] reply = cloudSender.recv();
-                            System.out.println("Cloud " + reply);
+                            long endTime = System.currentTimeMillis();
+
+                            System.out.println("Cloud " + new String(reply, ZMQ.CHARSET));
+                            recordResponseTime(startTime, endTime);
                         }
                     }
                 } catch (NumberFormatException e) {
@@ -112,7 +139,7 @@ public class ProxyServer {
     }
 
     private static void calculoTemperatura(List<Double> temperatureReadings, String timestamp, ZMQ.Socket cloudSender,
-            AtomicInteger messageCounter) {
+                                           AtomicInteger messageCounter) {
         double sum = 0;
         for (double temp : temperatureReadings) {
             sum += temp;
@@ -121,28 +148,38 @@ public class ProxyServer {
         System.out.println("Promedio temperatura: " + averageTemp + " at " + timestamp);
 
         if (averageTemp > MAX_TEMPERATURE) {
-            String alertMessage = "Alerta temperartura," + averageTemp + "," + timestamp;
+            String alertMessage = "Alerta temperatura," + averageTemp + "," + timestamp;
             sendAlertToSC("ALERTA: Temperatura fuera de rango " + averageTemp + " at " + timestamp, messageCounter);
+
+            long startTime = System.currentTimeMillis();
             cloudSender.send(alertMessage.getBytes(), 0);
             System.out.println("Sent alert: " + alertMessage);
             byte[] reply = cloudSender.recv();
-            System.out.println("Cloud " + reply);
+            long endTime = System.currentTimeMillis();
+
+            System.out.println("Cloud " + new String(reply, ZMQ.CHARSET));
+            recordResponseTime(startTime, endTime);
             messageCounter.incrementAndGet();
         }
     }
 
     private static void humedadDiaria(List<Double> humidityReadings, String timestamp, ZMQ.Socket cloudSender,
-            AtomicInteger messageCounter) {
+                                      AtomicInteger messageCounter) {
         double sum = 0;
         for (double humidity : humidityReadings) {
             sum += humidity;
         }
         double averageHumidity = sum / humidityReadings.size();
         String message = "Humedad," + averageHumidity + "," + timestamp;
+
+        long startTime = System.currentTimeMillis();
         cloudSender.send(message.getBytes(), 0);
         System.out.println("Sent to cloud: " + message);
         byte[] reply = cloudSender.recv();
-        System.out.println("Cloud " + reply);
+        long endTime = System.currentTimeMillis();
+
+        System.out.println("Cloud " + new String(reply, ZMQ.CHARSET));
+        recordResponseTime(startTime, endTime);
         messageCounter.incrementAndGet();
     }
 
@@ -154,5 +191,12 @@ public class ProxyServer {
             System.out.println("Alerta de humo enviada al sistema de calidad");
             messageCounter.incrementAndGet();
         }
+    }
+
+    private static void recordResponseTime(long startTime, long endTime) {
+        double responseTime = endTime - startTime;
+        totalTimeAdder.add(responseTime);
+        squaredTimeAdder.add(responseTime * responseTime);
+        responseCount.incrementAndGet();
     }
 }
