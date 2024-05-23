@@ -73,6 +73,7 @@ public class ProxyServer {
                         } else {
                             System.out.println("Valor de temperatura erroneo: " + value);
                             sendAlertToSC("ALERTA: Temperatura fuera de rango", messageCounter);
+                            messageCounter.incrementAndGet();
                         }
                     } else if (sensorId.startsWith("humedad")) {
                         humidityReadings.add(value);

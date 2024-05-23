@@ -131,7 +131,7 @@ public class SensorHumo implements Runnable {
             ZMQ.Socket aspersorSocket = context.createSocket(SocketType.REQ);
             aspersorSocket.connect("tcp://localhost:9876");
             aspersorSocket.send(message.getBytes(), 0);
-            System.out.println("ALERTA: sensor de humo detecta humo");
+            System.out.println("ALERTA: Sensor de humo detecta humo");
             messageCounter.incrementAndGet();
         }
     }

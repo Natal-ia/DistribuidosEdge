@@ -144,7 +144,7 @@ public class SensorTemperatura implements Runnable {
             ZMQ.Socket aspersorSocket = context.createSocket(SocketType.REQ);
             aspersorSocket.connect("tcp://localhost:9876");
             aspersorSocket.send(message.getBytes(), 0);
-            System.out.println("Alerta de humo enviada al sistema de calidad");
+            System.out.println("Alerta de temperatura enviada al sistema de calidad");
             messageCounter.incrementAndGet();
         }
     }
