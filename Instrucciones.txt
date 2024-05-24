@@ -1,4 +1,0 @@
-sensores, mi pc 
-proxy. mi maquina virtual tcp://10.43.100.230:1234
-healthcheck: puerto 5555 de mi localhost pc
-proxy respaldo: jaime tcp://10.43.100.191:1234
