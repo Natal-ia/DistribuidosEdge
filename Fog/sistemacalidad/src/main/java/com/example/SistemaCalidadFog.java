@@ -12,6 +12,7 @@ public class SistemaCalidadFog {
         try (ZContext context = new ZContext()) {
             ZMQ.Socket socket = context.createSocket(SocketType.REP);
             socket.bind("tcp://localhost:9876");
+            System.out.println("El sistema de calidad de la capa Cloud se ha inicializado correctamente y esta a la espera de alertas");
             while (!Thread.currentThread().isInterrupted()) {
                 // Espera una solicitud
                 byte[] solicitudBytes = socket.recv();

@@ -11,6 +11,8 @@ import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+//Descripción: Una clase que simula las acciones de un sensor de humo el toma muestras cada 3 segundos y si detecta una señal de humo
+//envia un mensaje al aspersor, una alerta al proxy y una alerta al sistema de calidad de la capa edge.
 public class SensorHumo implements Runnable {
     private final String sensorId;
     private final AtomicReference<String> proxyAddress;
