@@ -64,7 +64,6 @@ public class SensorTemperatura implements Runnable {
                     socket.connect(currentAddress);
                 }
             }
-            System.out.println("Mensajes enviados por sensor de humedad: " + messageCounter.get());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt(); // Restore the interrupted status
         } finally {
