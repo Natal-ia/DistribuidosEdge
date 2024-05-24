@@ -3,6 +3,11 @@ package com.example;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+
+/*
+* Descripción: Crea un 10 threads de cada uno de los sensores: Humedad, humo y temperatura aparte de crear el healthcheck. 
+* Espera a la ejecución de todos y luego imprime el numero de mensajes enviados en la capa Edge 
+*/
 public class SensorClient {
     public static void main(String[] args) {
         /*
@@ -26,13 +31,13 @@ public class SensorClient {
         AtomicInteger messageCounter = new AtomicInteger(0);
 
         // Start the health check thread
-        Thread healthCheckThread = new Thread(new HealthCheck(proxyAddress, messageCounter));
+        Thread healthCheckThread = new Thread(new HealthCheck(proxyAddress, messageCounter)); //Se inicializa el healthcheck  
         healthCheckThread.start();
 
         String nombreArchivo = "C:/Users/Natalia Mejia/OneDrive - Gimnasio Femenino/Desktop/Entrega 2- Distribuidos/Edge/sensor/src/main/resources/"
                 + configFile;
         Thread[] sensorThreads = new Thread[30];
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 3; i++) { //Se inicializan 10 hilos de los tres tipos de sensores
             if (i == 0) {
                 sensorName = "Temperatura";
                 nombreArchivo = "C:/Users/Natalia Mejia/OneDrive - Gimnasio Femenino/Desktop/Entrega 2- Distribuidos/Edge/sensor/src/main/resources/temperaturaConfig.txt";
@@ -45,7 +50,7 @@ public class SensorClient {
                 sensorName = "Humo";
                 nombreArchivo = "C:/Users/Natalia Mejia/OneDrive - Gimnasio Femenino/Desktop/Entrega 2- Distribuidos/Edge/sensor/src/main/resources/humoConfig.txt";
             }
-            for (int j = 0; j < 10; j++) {
+            for (int j = 0; j < 10; j++) {//Ciclo para crear los hilos de los sensores dependiendo el nombre del sensor y archivo
                 Runnable sensor;
                 switch (sensorName.toLowerCase()) {
                     case "humo":
@@ -68,7 +73,7 @@ public class SensorClient {
                 sensorThreads[j].start();
             }
         }
-        // Add shutdown hook to gracefully shut down threads
+        // Se utiliza addShutdownHook para cerrar todo los hilos
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             for (Thread thread : sensorThreads) {
                 if (thread != null) {

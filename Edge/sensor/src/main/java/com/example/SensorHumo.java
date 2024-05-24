@@ -24,6 +24,7 @@ public class SensorHumo implements Runnable {
 
     private AtomicInteger messageCounter;
 
+    //Constructor
     public SensorHumo(String sensorId, AtomicReference<String> proxyAddress, int threadId, String configFilePath, AtomicInteger messageCounter) {
         this.sensorId = sensorId;
         this.proxyAddress = proxyAddress;
@@ -33,13 +34,14 @@ public class SensorHumo implements Runnable {
         this.messageCounter = messageCounter;
     }
 
+    //Función principal que se ejecutara de forma asincronica
     @Override
     public void run() {
         try (ZContext context = new ZContext()) {
             ZMQ.Socket socket = context.createSocket(SocketType.PUSH);
-            socket.connect(proxyAddress.get());
+            socket.connect(proxyAddress.get()); //Se conecta al proxy principal
 
-            // Determine the sleep interval based on the sensor type
+            // Intervalo de espera de 3 segundos
             int sleepInterval = 3000;
 
             while (!Thread.currentThread().isInterrupted()) {
@@ -49,20 +51,18 @@ public class SensorHumo implements Runnable {
                 boolean sensorValueB = generateSensorBoolean();
                 timestamp = Instant.now().toString();
                 message = sensorId + "," + timestamp + "," + sensorValueB;
-                if (sensorValueB) {
+                if (sensorValueB) { //Si el valor es verdadero se envia una alerta al aspersor y al sistema de calidad
                     sendAlertToAspersor(message);
                     sendAlertToSC("ALERTA: Humo detecta humo");
                 }
 
-                // Send the message to the proxy server
                 socket.send(message.getBytes(), 0);
                 System.out.println("Sent: " + message + " from thread " + threadId);
                 messageCounter.incrementAndGet();
 
-                // Sleep for the specified interval before sending the next message
                 Thread.sleep(sleepInterval);
 
-                // Check if the proxy address has changed and reconnect if necessary
+                // Verifica si el socket a cambiado o es necesario reconectarse
                 String currentAddress = proxyAddress.get();
                 if (!socket.getLastEndpoint().equals(currentAddress)) {
                     socket.disconnect(socket.getLastEndpoint());
@@ -70,31 +70,34 @@ public class SensorHumo implements Runnable {
                 }
             }
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt(); // Restore the interrupted status
+            Thread.currentThread().interrupt();
         } finally {
-            System.out.println("Mensajes enviados por sensor de humo: " + messageCounter.get());
+            System.out.println("Mensajes enviados por sensor de humo: " + messageCounter.get()); //Al finalizar la ejecución imprime cuantos mensajes ha enviado este sensor
         }
     }
 
+    /*
+     * Descripción: Lee el archivo especificado y de este saca las posibilidades para los datos sea: Correcta, fuera de rango e incorrecta
+     */
     private void loadConfig() {
         try (BufferedReader reader = new BufferedReader(new FileReader(configFilePath))) {
             String line = reader.readLine();
             if (line != null) {
-                rangeProbability = Double.parseDouble(line.trim());
+                rangeProbability = Double.parseDouble(line.trim()); //Se obtiene los datos los datos  de que la información sea correcta
             } else {
                 throw new IllegalArgumentException("Invalid config file: missing rangeProbability");
             }
 
             line = reader.readLine();
             if (line != null) {
-                outOfRangeProbability = Double.parseDouble(line.trim());
+                outOfRangeProbability = Double.parseDouble(line.trim()); //Se obtiene los datos  de que la información este fuera de rango
             } else {
                 throw new IllegalArgumentException("Invalid config file: missing outOfRangeProbability");
             }
 
             line = reader.readLine();
             if (line != null) {
-                incorrectDataProbability = Double.parseDouble(line.trim());
+                incorrectDataProbability = Double.parseDouble(line.trim()); //Se obtiene los datos  de que la información sea incorrecta
             } else {
                 throw new IllegalArgumentException("Invalid config file: missing incorrectDataProbability");
             }
@@ -103,13 +106,16 @@ public class SensorHumo implements Runnable {
         }
     }
 
+    /*
+     * Descripción: Genera un valor de respuesta aleatorio dependiendo de las configuraciones dadas. Como es un sensor de humo solo devuelve verdadero o falso
+     */
     private boolean generateSensorBoolean() {
-        double randomNumber = new Random().nextDouble();
+        double randomNumber = new Random().nextDouble(); //Se genera un valor aleatorio
         boolean sensorValue;
 
-        if (randomNumber < rangeProbability) {
+        if (randomNumber < rangeProbability) { //Si el valor es menor o igual al rango de probabilidad se devuelve el valor verdadero
             sensorValue = true;
-        } else if (randomNumber < rangeProbability + incorrectDataProbability) {
+        } else if (randomNumber < rangeProbability + incorrectDataProbability) {//Si el valor es menor o igual al rango de probabilidad más la probabilidad de datos incorrecto se devuelve el valor falso
             sensorValue = false;
         } else {
             sensorValue = false;
@@ -118,13 +124,16 @@ public class SensorHumo implements Runnable {
         return sensorValue;
     }
 
+    /*
+     * Descripción: Función que envia una alerta al sistema de calidad de la capa Edge
+     */
     private void sendAlertToAspersor(String message) {
         try (ZContext context = new ZContext()) {
             ZMQ.Socket aspersorSocket = context.createSocket(SocketType.REQ);
-            aspersorSocket.connect("tcp://localhost:4200");
-            aspersorSocket.send(message.getBytes(), 0);
+            aspersorSocket.connect("tcp://localhost:4200"); //Se conecta al sistema de calidad
+            aspersorSocket.send(message.getBytes(), 0); //Envio de la alerta
             System.out.println("Alerta de humo enviada al aspersor");
-            messageCounter.incrementAndGet();
+            messageCounter.incrementAndGet(); //Se suma el contador de mensajes enviados
         }
     }
 

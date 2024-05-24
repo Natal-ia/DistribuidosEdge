@@ -8,6 +8,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/*
+ * Descripción: Esta clase actua como un puente entre la capa Edge y la capa Cloud además de que se encarga de algunos calculos con los datos recibidos de la capa Edge
+ */
 public class ProxyServer {
 
     private static final double MAX_TEMPERATURE = 29.0; // Temperatura máxima para generar alerta
@@ -16,6 +19,7 @@ public class ProxyServer {
 
     private static final List<Long> roundTripTimes = new ArrayList<>();
 
+    //Función principal
     public static void main(String[] args) {
         try (ZContext context = new ZContext()) {
             ZMQ.Socket receiver = context.createSocket(SocketType.PULL);
@@ -38,13 +42,14 @@ public class ProxyServer {
             Thread healthCheckThread = new Thread(new HealthCheckResponder(context, "tcp://*:1235", messageCounter_H));
             healthCheckThread.start();
 
+            //Se cierran todos los hilos abiertos
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 healthCheckThread.interrupt();
                 try {
                     healthCheckThread.join();
                 } catch (InterruptedException e) {
                     e.printStackTrace();
-                }
+                } //Al finalizar la ejecución se imprimen el tiempo de envio, la desviación estandar y los mensajes enviados
                 int totalMessagesSent = messageCounter.get() + messageCounter_H.get();
                 System.out.println("Mensajes enviados por el proxy: " + messageCounter.get());
                 System.out.println("Mensajes enviados por el proxy y su HealthCheck: " + totalMessagesSent);
@@ -55,7 +60,7 @@ public class ProxyServer {
             }));
 
             while (!Thread.currentThread().isInterrupted()) {
-                byte[] messageBytes = receiver.recv(0);
+                byte[] messageBytes = receiver.recv(0); //Se recibe el mensaje
                 String message = new String(messageBytes, ZMQ.CHARSET);
                 System.out.println("Received from sensor: " + message);
 
@@ -68,7 +73,7 @@ public class ProxyServer {
                 String valueStr = parts[2];
 
                 try {
-                    if (sensorId.startsWith("temperatura")) {
+                    if (sensorId.startsWith("temperatura")) { //Dependiendo del incio del mensaje se maneja la información acorde
                         double value = Double.parseDouble(valueStr);
                         if (value >= 11 && value <= 29.4) {
                             temperatureReadings.add(value);
@@ -82,6 +87,7 @@ public class ProxyServer {
                             messageCounter.incrementAndGet();
                             String messageCloud = "ALERTA, Temperatura fuera de rango," + timestamp;
                             sendMessageToCloud(messageCloud, cloudSender);
+                            messageCounter.incrementAndGet();
                         }
                     } else if (sensorId.startsWith("humedad")) {
                         double value = Double.parseDouble(valueStr);
@@ -109,8 +115,11 @@ public class ProxyServer {
         }
     }
 
+    /*
+     * Descripción: Se calcula la temperatura promedio con las lecturas de la capa Edge
+     */
     private static void calculoTemperatura(List<Double> temperatureReadings, String timestamp, ZMQ.Socket cloudSender,
-                                           AtomicInteger messageCounter) {
+                                        AtomicInteger messageCounter) {
         double sum = 0;
         for (double temp : temperatureReadings) {
             sum += temp;
@@ -118,40 +127,49 @@ public class ProxyServer {
         double averageTemp = sum / temperatureReadings.size();
         System.out.println("Promedio temperatura: " + averageTemp + " at " + timestamp);
 
-        if (averageTemp > MAX_TEMPERATURE) {
+        if (averageTemp > MAX_TEMPERATURE) { //Si la temperatura promedio es mayor al maximo establecido se nenvia una alerta al sistema de calidad
             String alertMessage = "Alerta temperatura," + averageTemp + "," + timestamp;
             sendAlertToSC("ALERTA: Temperatura fuera de rango " + averageTemp + " at " + timestamp, messageCounter);
             sendMessageToCloud(alertMessage, cloudSender);
-            messageCounter.incrementAndGet();
+            messageCounter.incrementAndGet(); //Se incrementa el contador de mensajes enviados
         }
     }
 
-    private static void humedadDiaria(List<Double> humidityReadings, String timestamp, ZMQ.Socket cloudSender,
-                                      AtomicInteger messageCounter) {
+    /*
+     * Descripción: Se calcula la humedad promedio diaria con las lecturas de humedad
+     */
+    private static void humedadDiaria(List<Double> humidityReadings, String timestamp, ZMQ.Socket cloudSender, 
+                                        AtomicInteger messageCounter) {
         double sum = 0;
         for (double humidity : humidityReadings) {
             sum += humidity;
         }
         double averageHumidity = sum / humidityReadings.size();
         String message = "Humedad," + averageHumidity + "," + timestamp;
-        sendMessageToCloud(message, cloudSender);
-        messageCounter.incrementAndGet();
+        sendMessageToCloud(message, cloudSender); //Se envia la humedad promedio a la capa Cloud
+        messageCounter.incrementAndGet(); //Se incrementa el contador de mensajes enviados
     }
 
+    /*
+     * Descripción: Se envia una alerta al sistema de calidad
+     */
     private static void sendAlertToSC(String message, AtomicInteger messageCounter) {
         try (ZContext context = new ZContext()) {
             ZMQ.Socket aspersorSocket = context.createSocket(SocketType.REQ);
-            aspersorSocket.connect("tcp://localhost:9876");
+            aspersorSocket.connect("tcp://localhost:9876"); //Se conecta al sistema de calidad para enviar la alerta
             aspersorSocket.send(message.getBytes(), 0);
             System.out.println("Alerta de humo enviada al sistema de calidad");
-            messageCounter.incrementAndGet();
+            messageCounter.incrementAndGet(); //Se incrementa el contador de mensajes enviados
         }
     }
 
+    /*
+     * Descripción: Se envia un mensaje a la capa Cloud 
+     */
     private static void sendMessageToCloud(String message, ZMQ.Socket cloudSender) {
         long startTime = System.currentTimeMillis();
-        cloudSender.send(message.getBytes(), 0);
-        byte[] reply = cloudSender.recv();
+        cloudSender.send(message.getBytes(), 0); //Se envia el mensaje a la capa cloud
+        byte[] reply = cloudSender.recv(); //Se espera la respuesta
         long endTime = System.currentTimeMillis();
         long roundTripTime = endTime - startTime;
         synchronized (roundTripTimes) {
@@ -160,6 +178,9 @@ public class ProxyServer {
         System.out.println("Sent to cloud: " + message + " - Round-trip time: " + roundTripTime + " ms");
     }
 
+    /*
+     * Descripción: Se calcula el promedio de los tiempos de llegada de los mensajes
+     */
     private static double calculateAverage(List<Long> times) {
         double sum = 0;
         synchronized (times) {
@@ -170,6 +191,9 @@ public class ProxyServer {
         return times.isEmpty() ? 0 : sum / times.size();
     }
 
+    /*
+     * Descripción: Se calcula la desviación estandar de los tiempos
+     */
     private static double calculateStandardDeviation(List<Long> times, double average) {
         double sum = 0;
         synchronized (times) {

@@ -3,17 +3,19 @@ package com.example;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
 
+/*
+ * Descripcioón: Clase que actua como un aspersor al recibir una alerta del sensor de humo este se enciende
+ */
 public class Aspersor {
     public static void main(String[] args) {
         try (ZContext context = new ZContext()) {
-            // Socket to talk to clients
             ZMQ.Socket socket = context.createSocket(ZMQ.REP);
-            socket.bind("tcp://localhost:4200");
+            socket.bind("tcp://localhost:4200"); //Se conecta al socket para escuchar alertas del sensor de humo
             System.out.println("Aspersor started and listening on tcp://localhost:4200");
 
             while (!Thread.currentThread().isInterrupted()) {
                 // Block until a message is received
-                byte[] reply = socket.recv(0);
+                byte[] reply = socket.recv(0); //Al recibir una alerta de humo se enciende 
 
                 // Print the message
                 System.out.println(

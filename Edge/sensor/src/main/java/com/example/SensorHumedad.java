@@ -11,6 +11,9 @@ import java.time.Instant;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+/*
+ * Descripción: Una clase que simula el actuar de un sensor de humedad el cual toma muestras cada 5 segundos y luego envia esos datos al proxy.
+ */
 public class SensorHumedad implements Runnable {
     String RESET = "\u001B[0m";
     String RED = "\u001B[31m";
@@ -35,6 +38,7 @@ public class SensorHumedad implements Runnable {
         this.messageCounter = messageCounter;
     }
 
+    //Función principal que se ejecutara de forma asincronica
     @Override
     public void run() {
         try (ZContext context = new ZContext()) {
@@ -47,19 +51,18 @@ public class SensorHumedad implements Runnable {
                 String message = "";
                 String timestamp;
 
-                double sensorValueH = generateSensorDouble(70.0, 100.0);
+                double sensorValueH = generateSensorDouble(70.0, 100.0); //Se genera el valor aleatorio
                 timestamp = Instant.now().toString();
                 message = sensorId + "," + timestamp + "," + sensorValueH;
 
-                // Send the message to the proxy server
+                // Envia un mensaje al servidor proxy
                 socket.send(message.getBytes(), 0);
                 System.out.println("Sent: " + message + " from thread " + threadId);
                 messageCounter.incrementAndGet();
 
-                // Sleep for the specified interval before sending the next message
                 Thread.sleep(sleepInterval);
 
-                // Check if the proxy address has changed and reconnect if necessary
+                // Verifica si el socket a cambiado o es necesario reconectarse
                 String currentAddress = proxyAddress.get();
                 if (!socket.getLastEndpoint().equals(currentAddress)) {
                     socket.disconnect(socket.getLastEndpoint());
@@ -68,18 +71,21 @@ public class SensorHumedad implements Runnable {
                 }
             }
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt(); // Restore the interrupted status
+            Thread.currentThread().interrupt();
         } finally {
-            System.out.println("Mensajes enviados por sensor de humedad: " + messageCounter.get());
+            System.out.println("Mensajes enviados por sensor de humedad: " + messageCounter.get()); //Al finalizar la ejecución imprime cuantos mensajes ha enviado este sensor
         }
     }
 
+    /*
+     * Descripción: Lee el archivo especificado y de este saca las posibilidades para los datos sea: Correcta, fuera de rango e incorrecta.
+     */
     private void loadConfig() {
         try (BufferedReader reader = new BufferedReader(new FileReader(configFilePath))) {
             // Read the first line for rangeProbability
             String line = reader.readLine();
             if (line != null) {
-                rangeProbability = Double.parseDouble(line.trim());
+                rangeProbability = Double.parseDouble(line.trim()); //Se obtiene los datos los datos  de que la información sea correcta
             } else {
                 throw new IllegalArgumentException("Invalid config file: missing rangeProbability");
             }
@@ -87,7 +93,7 @@ public class SensorHumedad implements Runnable {
             // Read the second line for outOfRangeProbability
             line = reader.readLine();
             if (line != null) {
-                outOfRangeProbability = Double.parseDouble(line.trim());
+                outOfRangeProbability = Double.parseDouble(line.trim()); //Se obtiene los datos  de que la información este fuera de rango
             } else {
                 throw new IllegalArgumentException("Invalid config file: missing outOfRangeProbability");
             }
@@ -95,7 +101,7 @@ public class SensorHumedad implements Runnable {
             // Read the third line for incorrectDataProbability
             line = reader.readLine();
             if (line != null) {
-                incorrectDataProbability = Double.parseDouble(line.trim());
+                incorrectDataProbability = Double.parseDouble(line.trim()); //Se obtiene los datos  de que la información sea incorrecta
             } else {
                 throw new IllegalArgumentException("Invalid config file: missing incorrectDataProbability");
             }
@@ -105,30 +111,39 @@ public class SensorHumedad implements Runnable {
         }
     }
 
+    /*
+     * Descripción: Genera un valor aleatorio dependiendo de las probabilidades dadas y los parametros de entrada que definen rango que puede tener el valor
+     */
     private double generateSensorDouble(double min, double max) {
         double randomNumber = random.nextDouble();
         double sensorValue;
         if (randomNumber < rangeProbability) {
-            // Generate data within range
+            // Genera un valor correcto
             sensorValue = generateValueWithinRange(min, max);
         } else if (randomNumber < rangeProbability + outOfRangeProbability) {
-            // Generate data out of range
+            // Genera un valor fuera de rango
             sensorValue = generateValueOutOfRange(min, max);
         } else {
-            // Generate incorrect data
+            // Genera un valor incorrecto
             sensorValue = generateIncorrectData();
         }
         return sensorValue;
     }
 
+    /*
+     * Descripción: Genera un valor double aleatorio dentro de un rango definido por los parametros de entrada
+     */
     private double generateValueWithinRange(double min, double max) {
-        // Generate data within the specified range
+        // Genera el valor dentro de un rango especifico
         return min + (max - min) * random.nextDouble();
     }
 
+    /*
+     * Descripción: Genera valores mayores a los del rango delimitado por los parametros de entrada
+     */
     private double generateValueOutOfRange(double min, double max) {
         Boolean higherThanRange = random.nextBoolean();
-        sendAlertToSC("ALERTA: Sensor de humedad fuera de rango");
+        sendAlertToSC("ALERTA: Sensor de humedad fuera de rango"); //Se envia una alerta al sistema de calidad
         if (higherThanRange) {
             return max + random.nextDouble() * 100; // Genera un valor mayor que el rango
         } else {
@@ -137,18 +152,23 @@ public class SensorHumedad implements Runnable {
         }
     }
 
+    /*
+     * Descripción: Genera un valor incorrecto en este caso un valor negativo
+     */
     private double generateIncorrectData() {
-        // Generate incorrect data as a negative random value
         return -random.nextDouble() * 100; // Genera un valor negativo entre 0 y -100
     }
 
+    /*
+     * Descripción: Envia una alerta al sistema de calidad
+     */
     private void sendAlertToSC(String message) {
         try (ZContext context = new ZContext()) {
             ZMQ.Socket aspersorSocket = context.createSocket(SocketType.REQ);
-            aspersorSocket.connect("tcp://localhost:9876");
-            aspersorSocket.send(message.getBytes(), 0);
+            aspersorSocket.connect("tcp://localhost:9876"); //Se conecta al sistema de calidad
+            aspersorSocket.send(message.getBytes(), 0); //Envia la alerta al sistema de calidad
             System.out.println("Alerta de humo enviada al sistema de calidad");
-            messageCounter.incrementAndGet();
+            messageCounter.incrementAndGet();//Se incrementa el contador de mensajes enviados
         }
     }
 }
