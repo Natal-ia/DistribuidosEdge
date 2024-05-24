@@ -46,6 +46,7 @@ public class HealthCheck implements Runnable {
                     }
 
                 }
+                System.out.println("Mensajes enviados por el Health Check: " + messageCounter.get());
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt(); // Restore interrupt status

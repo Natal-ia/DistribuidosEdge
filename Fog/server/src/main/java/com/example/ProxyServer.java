@@ -7,7 +7,6 @@ import org.zeromq.ZMQ;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.DoubleAdder;
 
 public class ProxyServer {
 
@@ -15,10 +14,7 @@ public class ProxyServer {
     private static final int SENSOR_COUNT = 10;
     private static final int HUMIDITY_CALCULATION_INTERVAL_MS = 5000;
 
-    // Acumuladores para los tiempos de respuesta
-    private static DoubleAdder totalTimeAdder = new DoubleAdder();
-    private static DoubleAdder squaredTimeAdder = new DoubleAdder();
-    private static AtomicInteger responseCount = new AtomicInteger(0);
+    private static final List<Long> roundTripTimes = new ArrayList<>();
 
     public static void main(String[] args) {
         try (ZContext context = new ZContext()) {
@@ -26,7 +22,7 @@ public class ProxyServer {
             ZMQ.Socket cloudSender = context.createSocket(SocketType.REQ);
 
             receiver.bind("tcp://*:1234");
-            cloudSender.connect("tcp://10.43.100.191:5678"); // Conectar al servidor en la nube
+            cloudSender.connect("tcp://10.139.103.205:5678"); // Conectar al servidor en la nube
 
             List<Double> temperatureReadings = new ArrayList<>();
             List<Double> humidityReadings = new ArrayList<>();
@@ -52,17 +48,10 @@ public class ProxyServer {
                 int totalMessagesSent = messageCounter.get() + messageCounter_H.get();
                 System.out.println("Mensajes enviados por el proxy: " + messageCounter.get());
                 System.out.println("Mensajes enviados por el proxy y su HealthCheck: " + totalMessagesSent);
-
-                // Calcular y mostrar tiempo promedio y desviación estándar
-                double totalTime = totalTimeAdder.sum();
-                int count = responseCount.get();
-                double meanTime = totalTime / count;
-                double squaredTimeSum = squaredTimeAdder.sum();
-                double variance = (squaredTimeSum / count) - (meanTime * meanTime);
-                double stdDeviation = Math.sqrt(variance);
-
-                System.out.println("Tiempo promedio de request-reply: " + meanTime + " ms");
-                System.out.println("Desviación estándar del tiempo de request-reply: " + stdDeviation + " ms");
+                double averageTime = calculateAverage(roundTripTimes);
+                double stdDevTime = calculateStandardDeviation(roundTripTimes, averageTime);
+                System.out.println("Tiempo promedio de envío y recibo del fog y cloud: " + averageTime + " ms");
+                System.out.println("Desviación estándar del tiempo de envío y recibo del fog y cloud: " + stdDevTime + " ms");
             }));
 
             while (!Thread.currentThread().isInterrupted()) {
@@ -88,44 +77,26 @@ public class ProxyServer {
                                 temperatureReadings.clear();
                             }
                         } else {
-
                             System.out.println("Valor de temperatura erroneo: " + value);
                             sendAlertToSC("ALERTA: Temperatura fuera de rango", messageCounter);
                             messageCounter.incrementAndGet();
                             String messageCloud = "ALERTA, Temperatura fuera de rango," + timestamp;
-
-                            long startTime = System.currentTimeMillis();
-                            cloudSender.send(messageCloud.getBytes(), 0);
-                            System.out.println("Sent to cloud: " + message);
-                            byte[] reply = cloudSender.recv();
-                            long endTime = System.currentTimeMillis();
-
-                            System.out.println("Cloud " + new String(reply, ZMQ.CHARSET));
-                            recordResponseTime(startTime, endTime);
+                            sendMessageToCloud(messageCloud, cloudSender);
                         }
                     } else if (sensorId.startsWith("humedad")) {
                         double value = Double.parseDouble(valueStr);
                         humidityReadings.add(value);
-                        if (System.currentTimeMillis()
-                                - lastHumidityCalculationTime >= HUMIDITY_CALCULATION_INTERVAL_MS) {
+                        if (System.currentTimeMillis() - lastHumidityCalculationTime >= HUMIDITY_CALCULATION_INTERVAL_MS) {
                             humedadDiaria(humidityReadings, timestamp, cloudSender, messageCounter);
                             humidityReadings.clear();
                             lastHumidityCalculationTime = System.currentTimeMillis();
                         }
                     } else if (sensorId.startsWith("humo")) {
-                        if (valueStr.equals(true)) {
+                        if (Boolean.parseBoolean(valueStr)) {
                             System.out.println("Alerta Humo ");
                             sendAlertToSC("ALERTA: Humo", messageCounter);
                             String messageCloud = "ALERTA, Humo detectado," + timestamp;
-
-                            long startTime = System.currentTimeMillis();
-                            cloudSender.send(messageCloud.getBytes(), 0);
-                            System.out.println("Sent to cloud: " + message);
-                            byte[] reply = cloudSender.recv();
-                            long endTime = System.currentTimeMillis();
-
-                            System.out.println("Cloud " + new String(reply, ZMQ.CHARSET));
-                            recordResponseTime(startTime, endTime);
+                            sendMessageToCloud(messageCloud, cloudSender);
                         }
                     }
                 } catch (NumberFormatException e) {
@@ -150,15 +121,7 @@ public class ProxyServer {
         if (averageTemp > MAX_TEMPERATURE) {
             String alertMessage = "Alerta temperatura," + averageTemp + "," + timestamp;
             sendAlertToSC("ALERTA: Temperatura fuera de rango " + averageTemp + " at " + timestamp, messageCounter);
-
-            long startTime = System.currentTimeMillis();
-            cloudSender.send(alertMessage.getBytes(), 0);
-            System.out.println("Sent alert: " + alertMessage);
-            byte[] reply = cloudSender.recv();
-            long endTime = System.currentTimeMillis();
-
-            System.out.println("Cloud " + new String(reply, ZMQ.CHARSET));
-            recordResponseTime(startTime, endTime);
+            sendMessageToCloud(alertMessage, cloudSender);
             messageCounter.incrementAndGet();
         }
     }
@@ -171,15 +134,7 @@ public class ProxyServer {
         }
         double averageHumidity = sum / humidityReadings.size();
         String message = "Humedad," + averageHumidity + "," + timestamp;
-
-        long startTime = System.currentTimeMillis();
-        cloudSender.send(message.getBytes(), 0);
-        System.out.println("Sent to cloud: " + message);
-        byte[] reply = cloudSender.recv();
-        long endTime = System.currentTimeMillis();
-
-        System.out.println("Cloud " + new String(reply, ZMQ.CHARSET));
-        recordResponseTime(startTime, endTime);
+        sendMessageToCloud(message, cloudSender);
         messageCounter.incrementAndGet();
     }
 
@@ -193,10 +148,35 @@ public class ProxyServer {
         }
     }
 
-    private static void recordResponseTime(long startTime, long endTime) {
-        double responseTime = endTime - startTime;
-        totalTimeAdder.add(responseTime);
-        squaredTimeAdder.add(responseTime * responseTime);
-        responseCount.incrementAndGet();
+    private static void sendMessageToCloud(String message, ZMQ.Socket cloudSender) {
+        long startTime = System.currentTimeMillis();
+        cloudSender.send(message.getBytes(), 0);
+        byte[] reply = cloudSender.recv();
+        long endTime = System.currentTimeMillis();
+        long roundTripTime = endTime - startTime;
+        synchronized (roundTripTimes) {
+            roundTripTimes.add(roundTripTime);
+        }
+        System.out.println("Sent to cloud: " + message + " - Round-trip time: " + roundTripTime + " ms");
+    }
+
+    private static double calculateAverage(List<Long> times) {
+        double sum = 0;
+        synchronized (times) {
+            for (long time : times) {
+                sum += time;
+            }
+        }
+        return times.isEmpty() ? 0 : sum / times.size();
+    }
+
+    private static double calculateStandardDeviation(List<Long> times, double average) {
+        double sum = 0;
+        synchronized (times) {
+            for (long time : times) {
+                sum += Math.pow(time - average, 2);
+            }
+        }
+        return times.isEmpty() ? 0 : Math.sqrt(sum / times.size());
     }
 }
