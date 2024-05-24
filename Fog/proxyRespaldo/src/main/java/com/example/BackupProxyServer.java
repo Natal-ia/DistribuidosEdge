@@ -14,6 +14,8 @@ public class BackupProxyServer {
     private static final int SENSOR_COUNT = 10;
     private static final int HUMIDITY_CALCULATION_INTERVAL_MS = 5000;
 
+    private static final List<Long> roundTripTimes = new ArrayList<>();
+
     public static void main(String[] args) {
         AtomicInteger messageCounter = new AtomicInteger(0);
         try (ZContext context = new ZContext()) {
@@ -21,25 +23,21 @@ public class BackupProxyServer {
             ZMQ.Socket cloudSender = context.createSocket(SocketType.REQ);
 
             receiver.bind("tcp://*:4321");
-            cloudSender.connect("tcp://localhost:5678"); // Conectar al servidor en la nube
+            cloudSender.connect("tcp://10.43.100.233:5678"); // Conectar al servidor en la nube
 
             List<Double> temperatureReadings = new ArrayList<>();
             List<Double> humidityReadings = new ArrayList<>();
 
             long lastHumidityCalculationTime = System.currentTimeMillis();
 
-            System.out.println("Backup Proxy server started and listening on tcp://*:1234");
+            System.out.println("Backup Proxy server started and listening on tcp://*:4321");
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                healthCheckThread.interrupt();
-                try {
-                    healthCheckThread.join();
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-                int totalMessagesSent = messageCounter.get() + messageCounter_H.get();
+                double averageTime = calculateAverage(roundTripTimes);
+                double stdDevTime = calculateStandardDeviation(roundTripTimes, averageTime);
                 System.out.println("Mensajes enviados por el proxy: " + messageCounter.get());
-                System.out.println("Mensajes enviados por el proxy y su HealthCheck: " + totalMessagesSent);
+                System.out.println("Tiempo promedio de envío y recibo del fog y cloud: " + averageTime + " ms");
+                System.out.println("Desviación estándar del tiempo de envío y recibo del fog y cloud: " + stdDevTime + " ms");
             }));
 
             while (!Thread.currentThread().isInterrupted()) {
@@ -65,44 +63,25 @@ public class BackupProxyServer {
                                 temperatureReadings.clear();
                             }
                         } else {
-
                             System.out.println("Valor de temperatura erroneo: " + value);
                             sendAlertToSC("ALERTA: Temperatura fuera de rango", messageCounter);
-                            messageCounter.incrementAndGet();
                             String messageCloud = "ALERTA, Temperatura fuera de rango," + timestamp;
-
-                            long startTime = System.currentTimeMillis();
-                            cloudSender.send(messageCloud.getBytes(), 0);
-                            System.out.println("Sent to cloud: " + message);
-                            byte[] reply = cloudSender.recv();
-                            long endTime = System.currentTimeMillis();
-
-                            System.out.println("Cloud " + new String(reply, ZMQ.CHARSET));
-                            recordResponseTime(startTime, endTime);
+                            sendMessageToCloud(messageCloud, cloudSender);
                         }
                     } else if (sensorId.startsWith("humedad")) {
                         double value = Double.parseDouble(valueStr);
                         humidityReadings.add(value);
-                        if (System.currentTimeMillis()
-                                - lastHumidityCalculationTime >= HUMIDITY_CALCULATION_INTERVAL_MS) {
+                        if (System.currentTimeMillis() - lastHumidityCalculationTime >= HUMIDITY_CALCULATION_INTERVAL_MS) {
                             humedadDiaria(humidityReadings, timestamp, cloudSender, messageCounter);
                             humidityReadings.clear();
                             lastHumidityCalculationTime = System.currentTimeMillis();
                         }
                     } else if (sensorId.startsWith("humo")) {
-                        if (valueStr.equals(true)) {
+                        if (Boolean.parseBoolean(valueStr)) {
                             System.out.println("Alerta Humo ");
                             sendAlertToSC("ALERTA: Humo", messageCounter);
                             String messageCloud = "ALERTA, Humo detectado," + timestamp;
-
-                            long startTime = System.currentTimeMillis();
-                            cloudSender.send(messageCloud.getBytes(), 0);
-                            System.out.println("Sent to cloud: " + message);
-                            byte[] reply = cloudSender.recv();
-                            long endTime = System.currentTimeMillis();
-
-                            System.out.println("Cloud " + new String(reply, ZMQ.CHARSET));
-                            recordResponseTime(startTime, endTime);
+                            sendMessageToCloud(messageCloud, cloudSender);
                         }
                     }
                 } catch (NumberFormatException e) {
@@ -116,7 +95,7 @@ public class BackupProxyServer {
     }
 
     private static void calculoTemperatura(List<Double> temperatureReadings, String timestamp, ZMQ.Socket cloudSender,
-            AtomicInteger messageCounter) {
+                                           AtomicInteger messageCounter) {
         double sum = 0;
         for (double temp : temperatureReadings) {
             sum += temp;
@@ -127,21 +106,13 @@ public class BackupProxyServer {
         if (averageTemp > MAX_TEMPERATURE) {
             String alertMessage = "Alerta temperatura," + averageTemp + "," + timestamp;
             sendAlertToSC("ALERTA: Temperatura fuera de rango " + averageTemp + " at " + timestamp, messageCounter);
-
-            long startTime = System.currentTimeMillis();
-            cloudSender.send(alertMessage.getBytes(), 0);
-            System.out.println("Sent alert: " + alertMessage);
-            byte[] reply = cloudSender.recv();
-            long endTime = System.currentTimeMillis();
-
-            System.out.println("Cloud " + new String(reply, ZMQ.CHARSET));
-            recordResponseTime(startTime, endTime);
-            messageCounter.incrementAndGet();
+            sendMessageToCloud(alertMessage, cloudSender);
+            
         }
     }
 
     private static void humedadDiaria(List<Double> humidityReadings, String timestamp, ZMQ.Socket cloudSender,
-            AtomicInteger messageCounter) {
+                                      AtomicInteger messageCounter) {
         double sum = 0;
         for (double humidity : humidityReadings) {
             sum += humidity;
@@ -149,15 +120,7 @@ public class BackupProxyServer {
         double averageHumidity = sum / humidityReadings.size();
         String message = "Humedad," + averageHumidity + "," + timestamp;
 
-        long startTime = System.currentTimeMillis();
-        cloudSender.send(message.getBytes(), 0);
-        System.out.println("Sent to cloud: " + message);
-        byte[] reply = cloudSender.recv();
-        long endTime = System.currentTimeMillis();
-
-        System.out.println("Cloud " + new String(reply, ZMQ.CHARSET));
-        recordResponseTime(startTime, endTime);
-        messageCounter.incrementAndGet();
+        sendMessageToCloud(message, cloudSender);
     }
 
     private static void sendAlertToSC(String message, AtomicInteger messageCounter) {
@@ -165,15 +128,42 @@ public class BackupProxyServer {
             ZMQ.Socket aspersorSocket = context.createSocket(SocketType.REQ);
             aspersorSocket.connect("tcp://localhost:9876");
             aspersorSocket.send(message.getBytes(), 0);
+            messageCounter.incrementAndGet();
             System.out.println("Alerta de humo enviada al sistema de calidad");
             messageCounter.incrementAndGet();
         }
     }
 
-    private static void recordResponseTime(long startTime, long endTime) {
-        double responseTime = endTime - startTime;
-        totalTimeAdder.add(responseTime);
-        squaredTimeAdder.add(responseTime * responseTime);
-        responseCount.incrementAndGet();
+    private static void sendMessageToCloud(String message, ZMQ.Socket cloudSender) {
+        long startTime = System.currentTimeMillis();
+        cloudSender.send(message.getBytes(), 0);
+        byte[] reply = cloudSender.recv();
+        long endTime = System.currentTimeMillis();
+        long roundTripTime = endTime - startTime;
+        messageCounter.incrementAndGet();
+        synchronized (roundTripTimes) {
+            roundTripTimes.add(roundTripTime);
+        }
+        System.out.println("Sent to cloud: " + message + " - Round-trip time: " + roundTripTime + " ms");
+    }
+
+    private static double calculateAverage(List<Long> times) {
+        double sum = 0;
+        synchronized (times) {
+            for (long time : times) {
+                sum += time;
+            }
+        }
+        return times.isEmpty() ? 0 : sum / times.size();
+    }
+
+    private static double calculateStandardDeviation(List<Long> times, double average) {
+        double sum = 0;
+        synchronized (times) {
+            for (long time : times) {
+                sum += Math.pow(time - average, 2);
+            }
+        }
+        return times.isEmpty() ? 0 : Math.sqrt(sum / times.size());
     }
 }

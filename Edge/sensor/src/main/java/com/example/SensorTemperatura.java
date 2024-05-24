@@ -39,7 +39,7 @@ public class SensorTemperatura implements Runnable {
             ZMQ.Socket socket = context.createSocket(SocketType.PUSH);
             socket.connect(proxyAddress.get());
 
-            int sleepInterval = 6000;
+            int sleepInterval = 4000;
 
             while (!Thread.currentThread().isInterrupted()) {
                 String message = "";
