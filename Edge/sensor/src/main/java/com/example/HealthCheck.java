@@ -31,17 +31,13 @@ public class HealthCheck implements Runnable {
                     String request = "OK";
                     socket.send(request.getBytes(ZMQ.CHARSET), 0);
                     messageCounter.incrementAndGet();
-
+                    
                     socket.setReceiveTimeOut(4000);
-
-                    // Receive the reply with a timeout
                     byte[] reply = socket.recv();
 
                     if (reply != null) {
-                        // If there's a reply within the timeout
                         System.out.println("Received response: " + new String(reply));
                     } else {
-                        // If no reply received within the timeout
                         handleProxyFailure(socket);
                     }
 
