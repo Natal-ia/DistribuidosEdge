@@ -31,7 +31,7 @@ public class SensorClient {
 
         String nombreArchivo = "C:/Users/Natalia Mejia/OneDrive - Gimnasio Femenino/Desktop/Entrega 2- Distribuidos/Edge/sensor/src/main/resources/"
                 + configFile;
-        Thread[] sensorThreads = new Thread[10];
+        Thread[] sensorThreads = new Thread[30];
         for (int i = 0; i < 3; i++) {
             if (i == 0) {
                 sensorName = "Temperatura";

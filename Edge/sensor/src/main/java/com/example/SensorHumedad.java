@@ -66,7 +66,9 @@ public class SensorHumedad implements Runnable {
                     socket.connect(currentAddress);
                     System.out.println(RED+"Reconnected to proxy server at " + currentAddress +RESET);
                 }
+             
             }
+            System.out.println("Mensajes enviados por sensor de humedad: " + messageCounter.get());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt(); // Restore the interrupted status
         } finally {
